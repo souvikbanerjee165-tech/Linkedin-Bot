@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional, Dict, Any
 import json
+import logging
 from app import crud
 from app.schemas import (
     PostGenerateRequest, PostGenerateResponse, DraftFormatOutput,
@@ -10,6 +11,7 @@ from app.services.deepseek_client import deepseek_client
 from app.services.scoring_engine import scoring_engine
 from app.services.voice_engine import voice_engine
 
+logger = logging.getLogger("posts_router")
 router = APIRouter(prefix="/api/posts", tags=["Posts"])
 
 CONTENT_PILLARS = {
@@ -29,11 +31,11 @@ CONTENT_PILLARS = {
 async def generate_post(payload: PostGenerateRequest):
     # Retrieve user background & verified knowledge
     brand = crud.get_profile_brand() or {}
-    product = crud.get_product_by_key(payload.product_key or "podleads_ai") or {}
+    product = crud.get_product_by_key(payload.product_key or "dental_os_front_desk") or {}
     verified_knowledge = crud.get_knowledge_items(category="verified_fact")
     voice_profile = crud.get_voice_profile()
 
-    pillar_name = CONTENT_PILLARS.get(payload.content_pillar or 1, "Practical AI automation demonstrations")
+    pillar_name = CONTENT_PILLARS.get(payload.content_pillar or 1, "Business problems costing time/money")
 
     # Construct strict anti-slop, anti-hallucination system prompt
     system_prompt = (
@@ -53,8 +55,20 @@ async def generate_post(payload: PostGenerateRequest):
         f"Content Pillar: {pillar_name}\n"
         f"Voice Profile: Avg Sentence Length ~{voice_profile.get('typical_sentence_length', 14)} words. Formality: {voice_profile.get('formality_level', 0.4)}. Technical: {voice_profile.get('technical_depth', 0.7)}.\n\n"
         "=== REQUIRED OUTPUT FORMAT ===\n"
-        "Return a JSON object containing six distinct drafts: concise, story, problem_solution, technical_breakdown, demo, commercial.\n"
-        "Each format must include: format_type, title, hook, main_body, closing_line, call_to_action, target_audience, primary_purpose, claims_to_verify (list), suggested_visual, full_text."
+        "Return a valid JSON object with a key 'drafts' containing a list of 6 draft objects, or a dictionary keyed by format.\n"
+        "Formats needed: concise, story, problem_solution, technical_breakdown, demo, commercial.\n"
+        "Each format MUST include:\n"
+        "- format_type: exactly one of ['concise', 'story', 'problem_solution', 'technical_breakdown', 'demo', 'commercial']\n"
+        "- title: short descriptive title\n"
+        "- hook: strong opening line\n"
+        "- main_body: 2-4 clean paragraphs\n"
+        "- closing_line: memorable concluding sentence\n"
+        "- call_to_action: low-friction invitation\n"
+        "- target_audience: audience name\n"
+        "- primary_purpose: purpose summary\n"
+        "- claims_to_verify: list of strings (unverified assumptions to verify)\n"
+        "- suggested_visual: description of diagram/screenshot\n"
+        "- full_text: the complete, ready-to-publish post text with clean line breaks"
     )
 
     user_prompt = (
@@ -78,7 +92,7 @@ async def generate_post(payload: PostGenerateRequest):
     )
 
     # Parse response JSON
-    content_str = completion["content"]
+    content_str = completion["content"].strip()
     try:
         # Strip potential markdown code fences
         if "```json" in content_str:
@@ -86,40 +100,89 @@ async def generate_post(payload: PostGenerateRequest):
         elif "```" in content_str:
             content_str = content_str.split("```")[1].split("```")[0].strip()
         parsed_json = json.loads(content_str)
-    except Exception:
-        # Fallback to structured fallback if json parse fails
+    except Exception as exc:
+        logger.warning(f"JSON parsing error: {exc}. Using fallback drafts.")
         fallback_data = deepseek_client._mock_completion_fallback(messages, "post_generation")
         parsed_json = json.loads(fallback_data["content"])
+
+    # Robust Normalization: Extract format objects whether returned as list or dict
+    format_map: Dict[str, Any] = {}
+    if isinstance(parsed_json, list):
+        for item in parsed_json:
+            if isinstance(item, dict):
+                ft = item.get("format_type", "").lower()
+                if ft:
+                    format_map[ft] = item
+    elif isinstance(parsed_json, dict):
+        if "drafts" in parsed_json and isinstance(parsed_json["drafts"], list):
+            for item in parsed_json["drafts"]:
+                if isinstance(item, dict):
+                    ft = item.get("format_type", "").lower()
+                    if ft:
+                        format_map[ft] = item
+        elif "drafts" in parsed_json and isinstance(parsed_json["drafts"], dict):
+            for k, v in parsed_json["drafts"].items():
+                format_map[k.lower()] = v
+        else:
+            for k, v in parsed_json.items():
+                format_map[k.lower()] = v
+
+    def find_draft(fmt: str) -> dict:
+        if fmt in format_map and isinstance(format_map[fmt], dict):
+            return format_map[fmt]
+        # Check aliases
+        aliases = {
+            "concise": ["concise", "short", "bullet"],
+            "story": ["story", "lesson", "builder"],
+            "problem_solution": ["problem_solution", "problem-solution", "problem", "solution"],
+            "technical_breakdown": ["technical_breakdown", "technical", "tech", "architecture"],
+            "demo": ["demo", "demonstration", "demonstration_led"],
+            "commercial": ["commercial", "offer", "sales"]
+        }
+        for alias in aliases.get(fmt, [fmt]):
+            for k, v in format_map.items():
+                clean_k = k.replace("-", "_").replace(" ", "_")
+                if alias in clean_k and isinstance(v, dict):
+                    return v
+        return {}
+
+    fallback_templates = deepseek_client.get_structured_drafts_fallback()
 
     # Validate and structure draft formats
     draft_outputs: Dict[str, DraftFormatOutput] = {}
     flagged_claims: List[str] = []
     
     for fmt_key in ["concise", "story", "problem_solution", "technical_breakdown", "demo", "commercial"]:
-        raw_draft = parsed_json.get(fmt_key, {})
-        full_text = raw_draft.get("full_text") or (
-            raw_draft.get("hook", "") + "\n\n" +
-            raw_draft.get("main_body", "") + "\n\n" +
-            raw_draft.get("closing_line", "") + "\n\n" +
-            (raw_draft.get("call_to_action", "") or "")
-        ).strip()
+        raw_draft = find_draft(fmt_key)
+        fallback_item = fallback_templates.get(fmt_key, {})
+
+        hook = raw_draft.get("hook") or fallback_item.get("hook", "")
+        main_body = raw_draft.get("main_body") or fallback_item.get("main_body", "")
+        closing_line = raw_draft.get("closing_line") or fallback_item.get("closing_line", "")
+        call_to_action = raw_draft.get("call_to_action") or fallback_item.get("call_to_action", "")
+
+        full_text = raw_draft.get("full_text")
+        if not full_text or len(full_text.strip()) == 0:
+            full_text = f"{hook}\n\n{main_body}\n\n{closing_line}\n\n{call_to_action}".strip()
+        if not full_text or len(full_text.strip()) == 0:
+            full_text = fallback_item.get("full_text", "")
         
         claims_list = raw_draft.get("claims_to_verify", [])
         if not claims_list and fmt_key == "demo":
-            claims_list = ["Verify demo clinic inspection data before publishing."]
+            claims_list = ["Verify operational audit metrics before publishing live numbers."]
         flagged_claims.extend(claims_list)
 
         draft_outputs[fmt_key] = DraftFormatOutput(
             format_type=fmt_key,
-            title=raw_draft.get("title", fmt_key.replace("_", " ").title()),
-            hook=raw_draft.get("hook", ""),
-            main_body=raw_draft.get("main_body", ""),
-            closing_line=raw_draft.get("closing_line", ""),
-            call_to_action=raw_draft.get("call_to_action"),
-            target_audience=raw_draft.get("target_audience", payload.target_audience or "B2B Decision Makers"),
-            primary_purpose=raw_draft.get("primary_purpose", "B2B Positioning"),
+            title=raw_draft.get("title") or fallback_item.get("title", fmt_key.replace("_", " ").title()),
+            hook=hook,
+            main_body=main_body,
+            closing_line=closing_line,
+            call_to_action=call_to_action,
+            target_audience=raw_draft.get("target_audience") or payload.target_audience or "B2B Decision Makers",
+            primary_purpose=raw_draft.get("primary_purpose") or "B2B Positioning & Lead Generation",
             claims_to_verify=claims_list,
-            suggested_visual=raw_draft.get("suggested_visual", "Flowchart or clean terminal screenshot"),
+            suggested_visual=raw_draft.get("suggested_visual") or fallback_item.get("suggested_visual", "Clean workflow diagram or terminal scorecard"),
             full_text=full_text
         )
 

@@ -72,9 +72,10 @@ export default function WritePost() {
         commercial_intent: "Attract decision-makers looking to eliminate manual bottlenecks"
       });
       setGenerationResult(res);
-      setActiveFormat("problem_solution");
-      const defaultText = res.drafts.problem_solution ? res.drafts.problem_solution.full_text : "";
-      setEditedText(defaultText);
+      const chosenFormat = (res.drafts && res.drafts[activeFormat]?.full_text) ? activeFormat : "problem_solution";
+      setActiveFormat(chosenFormat);
+      const text = (res.drafts && res.drafts[chosenFormat]?.full_text) || (res.drafts && Object.values(res.drafts)[0]?.full_text) || "";
+      setEditedText(text);
 
       // Score
       const draftObj = await api.getPost(res.draft_id);
