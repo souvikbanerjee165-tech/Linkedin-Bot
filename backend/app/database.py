@@ -213,6 +213,23 @@ def init_db():
     );
     """)
 
+    # 10. Prospect Leads & CRM Pipeline
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS prospect_leads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        prospect_name TEXT NOT NULL,
+        company TEXT,
+        role_title TEXT,
+        website_url TEXT,
+        origin_post_id INTEGER,
+        stage TEXT DEFAULT 'inbound_dm' CHECK(stage IN ('inbound_dm', 'call_booked', 'proposal_sent', 'closed_won', 'lost')),
+        deal_value_usd REAL DEFAULT 0.0,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
     conn.commit()
     conn.close()
 

@@ -9,6 +9,7 @@ def setup_test_db(tmp_path, monkeypatch):
     test_db = tmp_path / "test_api.db"
     monkeypatch.setattr(settings, "database_path", str(test_db))
     monkeypatch.setattr(settings, "backup_dir", str(tmp_path / "backups"))
+    monkeypatch.setattr(settings, "deepseek_api_key", "")
     init_db()
     seed_initial_data_if_empty()
 
@@ -171,3 +172,26 @@ def test_system_status():
     data = res.json()
     assert "total_calls" in data
     assert "current_model" in data
+
+def test_crm_leads():
+    res = client.post("/api/performance/leads", json={
+        "prospect_name": "Dr. Sarah Mitchell",
+        "company": "Apex Dental Group",
+        "role_title": "Clinic Owner",
+        "stage": "inbound_dm",
+        "deal_value_usd": 4500.0,
+        "notes": "Interested in automated missed-call triage"
+    })
+    assert res.status_code == 200
+    lead_id = res.json()["id"]
+
+    # Retrieve
+    get_res = client.get("/api/performance/leads")
+    assert get_res.status_code == 200
+    leads = get_res.json()
+    assert any(l["id"] == lead_id for l in leads)
+
+    # Update stage
+    put_res = client.put(f"/api/performance/leads/{lead_id}", json={"stage": "call_booked"})
+    assert put_res.status_code == 200
+    assert put_res.json()["stage"] == "call_booked"

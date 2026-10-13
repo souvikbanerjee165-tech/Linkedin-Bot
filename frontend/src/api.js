@@ -61,15 +61,20 @@ export const api = {
     body: JSON.stringify(data)
   }).then(r => r.json()),
 
-  // Research
+  // Research & Playwright Signal Inspector
   getResearch: () => fetch(`${API_BASE}/research`).then(r => r.json()),
   createResearch: (data) => fetch(`${API_BASE}/research`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   }).then(r => r.json()),
+  inspectUrl: (url) => fetch(`${API_BASE}/research/inspect-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url })
+  }).then(r => r.json()),
 
-  // Performance
+  // Performance & Inbound CRM
   getPerformance: () => fetch(`${API_BASE}/performance`).then(r => r.json()),
   logPerformance: (data) => fetch(`${API_BASE}/performance`, {
     method: 'POST',
@@ -77,6 +82,17 @@ export const api = {
     body: JSON.stringify(data)
   }).then(r => r.json()),
   getAnalyticsSummary: () => fetch(`${API_BASE}/performance/summary`).then(r => r.json()),
+  getLeads: () => fetch(`${API_BASE}/performance/leads`).then(r => r.json()),
+  createLead: (data) => fetch(`${API_BASE}/performance/leads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(r => r.json()),
+  updateLead: (id, data) => fetch(`${API_BASE}/performance/leads/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(r => r.json()),
 
   // Exports
   getClipboard: (id) => fetch(`${API_BASE}/exports/clipboard/${id}`).then(r => r.json()),

@@ -472,3 +472,50 @@ def get_api_usage_summary() -> Dict[str, Any]:
     return dict(row) if row else {
         "total_calls": 0, "total_prompt_tokens": 0, "total_completion_tokens": 0, "total_tokens": 0, "total_cost_usd": 0.0
     }
+
+# 10. Prospect Leads CRUD
+def get_prospect_leads() -> List[Dict[str, Any]]:
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM prospect_leads ORDER BY id DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def create_prospect_lead(lead: Dict[str, Any]) -> Dict[str, Any]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO prospect_leads (
+        prospect_name, company, role_title, website_url, origin_post_id,
+        stage, deal_value_usd, notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        lead.get("prospect_name"),
+        lead.get("company", ""),
+        lead.get("role_title", ""),
+        lead.get("website_url", ""),
+        lead.get("origin_post_id"),
+        lead.get("stage", "inbound_dm"),
+        lead.get("deal_value_usd", 0.0),
+        lead.get("notes", "")
+    ))
+    new_id = cursor.lastrowid
+    conn.commit()
+    row = conn.execute("SELECT * FROM prospect_leads WHERE id = ?", (new_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else {"id": new_id, **lead}
+
+def update_prospect_lead(lead_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    set_clauses = []
+    values = []
+    for k, v in updates.items():
+        if v is not None:
+            set_clauses.append(f"{k} = ?")
+            values.append(v)
+    if set_clauses:
+        values.append(lead_id)
+        conn.execute(f"UPDATE prospect_leads SET {', '.join(set_clauses)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?", values)
+        conn.commit()
+    row = conn.execute("SELECT * FROM prospect_leads WHERE id = ?", (lead_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None

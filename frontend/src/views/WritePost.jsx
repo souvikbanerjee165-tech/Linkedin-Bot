@@ -3,7 +3,9 @@ import { api } from '../api';
 import { 
   Sparkles, CheckCircle2, AlertTriangle, Copy, 
   Download, ThumbsUp, RefreshCw, Sliders, Eye, 
-  FileText, ArrowRight, ShieldAlert, Award
+  FileText, ArrowRight, ShieldAlert, Award, Globe, 
+  Smartphone, Monitor, Share2, ThumbsUp as LikeIcon,
+  MessageCircle, Repeat2, Send
 } from 'lucide-react';
 
 const FORMAT_LABELS = {
@@ -45,6 +47,15 @@ export default function WritePost() {
   const [feedbackSaved, setFeedbackSaved] = useState("");
   const [scoreData, setScoreData] = useState(null);
 
+  // Playwright URL inspector state
+  const [inspectUrl, setInspectUrl] = useState("");
+  const [inspecting, setInspecting] = useState(false);
+  const [inspectionResult, setInspectionResult] = useState(null);
+
+  // LinkedIn Feed Preview state
+  const [previewMode, setPreviewMode] = useState("editor"); // 'editor' | 'desktop' | 'mobile'
+  const [expandedPreview, setExpandedPreview] = useState(false);
+
   const handleGenerate = async (e) => {
     if (e) e.preventDefault();
     if (!ideaPrompt.trim()) return;
@@ -72,6 +83,24 @@ export default function WritePost() {
       alert("Error generating drafts. Please check your connection or settings.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRunPlaywrightInspection = async () => {
+    if (!inspectUrl.trim()) return;
+    setInspecting(true);
+    try {
+      const signals = await api.inspectUrl(inspectUrl);
+      setInspectionResult(signals);
+      // Preload hook into the idea box
+      const newPrompt = `Website audit of ${signals.target_url}: Found opportunity score of ${signals.opportunity_score}/100. ${signals.outreach_angle} Bottlenecks observed: ${signals.observable_bottlenecks.join('; ')}`;
+      setIdeaPrompt(newPrompt);
+      setSelectedProduct("dental_sales_intel");
+      setSelectedPillar(2); // Practical demonstration
+    } catch (err) {
+      alert("Error running Playwright audit. Make sure the URL is reachable.");
+    } finally {
+      setInspecting(false);
     }
   };
 
@@ -123,25 +152,74 @@ export default function WritePost() {
 
   const currentDraft = generationResult ? generationResult.drafts[activeFormat] : null;
 
+  // Render truncated text for LinkedIn feed preview
+  const lines = editedText.split('\n');
+  const previewCutoff = previewMode === 'mobile' ? 4 : 3;
+  const isCut = lines.length > previewCutoff && !expandedPreview;
+  const displayedText = isCut ? lines.slice(0, previewCutoff).join('\n') : editedText;
+
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* Title */}
       <div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
           <Sparkles className="w-8 h-8 text-indigo-400" />
-          LinkedIn Post Generator
+          LinkedIn Post Generator & Feed Preview
         </h1>
         <p className="text-slate-400 text-sm mt-1">
-          Turn a plain-English idea into 6 distinct, grounded LinkedIn drafts with real DeepSeek intelligence and buyer-intent scoring.
+          Generate 6 distinct B2B drafts with live DeepSeek AI, audit prospect websites with Playwright, and test mobile/desktop hook cutoffs.
         </p>
+      </div>
+
+      {/* Playwright Headless Signal Inspector Banner */}
+      <div className="bg-slate-900/80 border border-indigo-900/40 rounded-2xl p-5 sm:p-6 space-y-4">
+        <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
+          <Globe className="w-4 h-4" />
+          Playwright Live Web Signal Inspector (Dental & Agency Sites)
+        </div>
+        <p className="text-xs text-slate-300">
+          Enter a prospect's public website. Playwright headlessly checks for online booking widgets, load speed, contact friction, and generates an audit you can turn directly into a post.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            placeholder="e.g. https://brightdentalcare.com or any practice URL"
+            value={inspectUrl}
+            onChange={e => setInspectUrl(e.target.value)}
+            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+          />
+          <button
+            onClick={handleRunPlaywrightInspection}
+            disabled={inspecting || !inspectUrl.trim()}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${inspecting ? 'animate-spin' : ''}`} />
+            {inspecting ? 'Inspecting with Playwright...' : 'Inspect Site & Preload Post'}
+          </button>
+        </div>
+
+        {inspectionResult && (
+          <div className="bg-slate-950/80 border border-emerald-900/30 rounded-xl p-4 text-xs text-slate-300 space-y-2 animate-fadeIn">
+            <div className="flex justify-between items-center text-emerald-400 font-bold">
+              <span>Audit Complete for: {inspectionResult.page_title || inspectionResult.target_url}</span>
+              <span className="font-mono bg-emerald-500/10 px-2.5 py-0.5 rounded text-emerald-400">
+                Opportunity Score: {inspectionResult.opportunity_score}/100
+              </span>
+            </div>
+            <p><strong>Load Speed:</strong> {inspectionResult.load_time_seconds}s | <strong>Interactive Booking:</strong> {inspectionResult.has_interactive_booking ? 'Detected' : 'None (Phone only)'}</p>
+            <p className="text-indigo-300 font-medium"><strong>Strategy Angle:</strong> {inspectionResult.outreach_angle}</p>
+          </div>
+        )}
       </div>
 
       {/* Input Idea Box */}
       <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
         <div className="space-y-2">
           <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-            <span>Describe your idea in ordinary language:</span>
-            <span className="text-[11px] text-indigo-400 font-normal">Zero-Slop Engine Enforced</span>
+            <span>Describe your post idea or core argument:</span>
+            <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> DeepSeek Live API Active
+            </span>
           </label>
           <textarea
             rows={3}
@@ -234,21 +312,54 @@ export default function WritePost() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Draft Area (2 cols) */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Format Tabs */}
-            <div className="flex flex-wrap gap-1.5 bg-slate-900 border border-slate-800 p-1.5 rounded-2xl">
-              {Object.keys(generationResult.drafts).map(fmtKey => (
+            {/* Format Tabs & Preview View Switcher */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex flex-wrap gap-1.5 bg-slate-900 border border-slate-800 p-1.5 rounded-2xl">
+                {Object.keys(generationResult.drafts).map(fmtKey => (
+                  <button
+                    key={fmtKey}
+                    onClick={() => handleFormatChange(fmtKey)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                      activeFormat === fmtKey
+                        ? 'bg-indigo-600 text-white shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {FORMAT_LABELS[fmtKey] || fmtKey}
+                  </button>
+                ))}
+              </div>
+
+              {/* View Switcher: Editor vs Desktop Feed vs Mobile Feed */}
+              <div className="flex bg-slate-900 border border-slate-800 rounded-xl p-1 gap-1">
                 <button
-                  key={fmtKey}
-                  onClick={() => handleFormatChange(fmtKey)}
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold transition ${
-                    activeFormat === fmtKey
-                      ? 'bg-indigo-600 text-white shadow'
-                      : 'text-slate-400 hover:text-white'
+                  onClick={() => setPreviewMode('editor')}
+                  className={`px-3 py-1 text-xs font-medium rounded-lg flex items-center gap-1.5 transition ${
+                    previewMode === 'editor' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  {FORMAT_LABELS[fmtKey] || fmtKey}
+                  <FileText className="w-3 h-3" />
+                  Editor
                 </button>
-              ))}
+                <button
+                  onClick={() => setPreviewMode('desktop')}
+                  className={`px-3 py-1 text-xs font-medium rounded-lg flex items-center gap-1.5 transition ${
+                    previewMode === 'desktop' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Monitor className="w-3 h-3" />
+                  Desktop Feed
+                </button>
+                <button
+                  onClick={() => setPreviewMode('mobile')}
+                  className={`px-3 py-1 text-xs font-medium rounded-lg flex items-center gap-1.5 transition ${
+                    previewMode === 'mobile' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Smartphone className="w-3 h-3" />
+                  Mobile Feed
+                </button>
+              </div>
             </div>
 
             {/* Claims Verification Warning Box */}
@@ -266,85 +377,166 @@ export default function WritePost() {
               </div>
             )}
 
-            {/* Editor Workspace */}
-            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 space-y-4">
-              <div className="flex flex-wrap justify-between items-center gap-2 text-xs text-slate-400 pb-2 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-200">Active Format:</span>
-                  <span className="text-indigo-400 font-mono">{FORMAT_LABELS[activeFormat]}</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span>Words: <strong className="text-white">{editedText.split(/\s+/).filter(Boolean).length}</strong></span>
-                  <span>Characters: <strong className="text-white">{editedText.length}</strong></span>
-                </div>
-              </div>
-
-              {/* Editable Text Area */}
-              <textarea
-                rows={14}
-                value={editedText}
-                onChange={e => setEditedText(e.target.value)}
-                className="w-full bg-slate-950/80 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-sans leading-relaxed"
-              />
-
-              {/* Visual Suggestion Tag */}
-              {currentDraft && currentDraft.suggested_visual && (
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 flex items-start gap-2.5">
-                  <Eye className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-white">Recommended Supporting Visual:</strong> {currentDraft.suggested_visual}
+            {/* EDITOR VIEW */}
+            {previewMode === 'editor' && (
+              <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 space-y-4">
+                <div className="flex flex-wrap justify-between items-center gap-2 text-xs text-slate-400 pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-200">Active Format:</span>
+                    <span className="text-indigo-400 font-mono">{FORMAT_LABELS[activeFormat]}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span>Words: <strong className="text-white">{editedText.split(/\s+/).filter(Boolean).length}</strong></span>
+                    <span>Characters: <strong className="text-white">{editedText.length}</strong></span>
                   </div>
                 </div>
-              )}
 
-              {/* Voice Feedback Tagging Buttons */}
-              <div className="space-y-2 pt-2">
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Calibrate Writing Style (Select how this draft sounds):
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    "Sounds like me",
-                    "Too formal",
-                    "Too promotional",
-                    "Too generic",
-                    "Too technical",
-                    "Good to publish"
-                  ].map(tag => (
-                    <button
-                      key={tag}
-                      onClick={() => handleVoiceFeedback(tag)}
-                      className="px-3 py-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs rounded-lg transition"
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-                {feedbackSaved && (
-                  <p className="text-xs text-emerald-400 font-medium">{feedbackSaved}</p>
+                <textarea
+                  rows={13}
+                  value={editedText}
+                  onChange={e => setEditedText(e.target.value)}
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-sans leading-relaxed"
+                />
+
+                {currentDraft && currentDraft.suggested_visual && (
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 flex items-start gap-2.5">
+                    <Eye className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-white">Recommended Supporting Visual:</strong> {currentDraft.suggested_visual}
+                    </div>
+                  </div>
                 )}
-              </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-slate-800">
-                <button
-                  onClick={handleSaveAndRescore}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl transition"
-                >
-                  Save Edits & Refresh Score
-                </button>
+                {/* Voice Feedback Tagging Buttons */}
+                <div className="space-y-2 pt-2">
+                  <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Calibrate Writing Style (Select how this draft sounds):
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      "Sounds like me",
+                      "Too formal",
+                      "Too promotional",
+                      "Too generic",
+                      "Too technical",
+                      "Good to publish"
+                    ].map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => handleVoiceFeedback(tag)}
+                        className="px-3 py-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs rounded-lg transition"
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                  {feedbackSaved && (
+                    <p className="text-xs text-emerald-400 font-medium">{feedbackSaved}</p>
+                  )}
+                </div>
 
-                <div className="flex items-center gap-2">
+                {/* Action Buttons */}
+                <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-slate-800">
                   <button
-                    onClick={handleCopyClipboard}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/20 transition"
+                    onClick={handleSaveAndRescore}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl transition"
                   >
-                    <Copy className="w-4 h-4" />
-                    {copied ? "Copied for LinkedIn!" : "Copy for LinkedIn Composer"}
+                    Save Edits & Refresh Score
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleCopyClipboard}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/20 transition"
+                    >
+                      <Copy className="w-4 h-4" />
+                      {copied ? "Copied for LinkedIn!" : "Copy for LinkedIn Composer"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* LIVE LINKEDIN FEED PREVIEW (Desktop or Mobile) */}
+            {previewMode !== 'editor' && (
+              <div className="space-y-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-slate-400 flex items-center justify-between">
+                  <span>Simulating <strong>{previewMode === 'mobile' ? 'Mobile App' : 'Desktop Feed'}</strong> cutoff fold:</span>
+                  <span className="text-indigo-400 font-medium">
+                    {isCut ? `Cutoff at line ${previewCutoff} ("...see more" active)` : 'Full post expanded'}
+                  </span>
+                </div>
+
+                <div className={`mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl ${
+                  previewMode === 'mobile' ? 'max-w-sm' : 'w-full'
+                }`}>
+                  {/* LinkedIn Post Header */}
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center font-bold text-white text-sm flex-shrink-0 shadow">
+                      YOU
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white leading-tight">
+                        Software Builder & Automation Specialist
+                      </div>
+                      <div className="text-[11px] text-slate-400 leading-tight mt-0.5">
+                        Building AI-Powered Business Systems & Sales Intelligence
+                      </div>
+                      <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <span>Just now</span> • <span>🌐</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Post Body with Hook Fold */}
+                  <div className="text-xs sm:text-sm text-slate-200 font-sans leading-relaxed whitespace-pre-line mb-4">
+                    {displayedText}
+                    {isCut && (
+                      <span
+                        onClick={() => setExpandedPreview(true)}
+                        className="text-slate-400 hover:text-indigo-400 font-semibold cursor-pointer ml-1 inline-block"
+                      >
+                        ...see more
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Reaction and Engagement Counters */}
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 mb-2">
+                    <div className="flex items-center gap-1">
+                      <span className="bg-indigo-600 text-white rounded-full p-0.5 text-[8px]">👍</span>
+                      <span>18 people interested</span>
+                    </div>
+                    <div>4 comments</div>
+                  </div>
+
+                  {/* LinkedIn Action Buttons */}
+                  <div className="pt-1 border-t border-slate-800/80 flex justify-between text-slate-400 text-xs px-2">
+                    <button className="flex items-center gap-1.5 hover:text-white py-1">
+                      <LikeIcon className="w-4 h-4" /> Like
+                    </button>
+                    <button className="flex items-center gap-1.5 hover:text-white py-1">
+                      <MessageCircle className="w-4 h-4" /> Comment
+                    </button>
+                    <button className="flex items-center gap-1.5 hover:text-white py-1">
+                      <Repeat2 className="w-4 h-4" /> Repost
+                    </button>
+                    <button className="flex items-center gap-1.5 hover:text-white py-1">
+                      <Send className="w-4 h-4" /> Send
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-center pt-2">
+                  <button
+                    onClick={() => setExpandedPreview(!expandedPreview)}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+                  >
+                    {expandedPreview ? "Simulate Fold Again" : "Expand Full Post Preview"}
                   </button>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Right Column: Buyer-Intent Scorecard (1 col) */}

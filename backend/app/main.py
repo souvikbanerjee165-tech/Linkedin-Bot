@@ -52,6 +52,11 @@ def health_check():
         "deepseek_model": settings.deepseek_model
     }
 
+# Mount uploads directory for screenshots and audits
+uploads_dir = Path(settings.uploads_dir)
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+
 # Mount static frontend build if it exists
 frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 if frontend_dist.exists():

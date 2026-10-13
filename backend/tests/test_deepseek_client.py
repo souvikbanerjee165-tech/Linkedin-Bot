@@ -14,7 +14,8 @@ def test_cost_calculation():
     assert abs(small_cost - round(expected, 6)) < 1e-5
 
 @pytest.mark.asyncio
-async def test_offline_mock_completion_fallback():
+async def test_offline_mock_completion_fallback(monkeypatch):
+    monkeypatch.setattr(settings, "deepseek_api_key", "")
     client = DeepSeekClient()
     messages = [
         {"role": "system", "content": "You are a LinkedIn strategist."},
