@@ -32,12 +32,28 @@ async def generate_post(payload: PostGenerateRequest):
     # Retrieve user background & verified knowledge
     brand = crud.get_profile_brand() or {}
     product = crud.get_product_by_key(payload.product_key or "dental_os_front_desk") or {}
-    verified_knowledge = crud.get_knowledge_items(category="verified_fact")
+    all_knowledge = crud.get_knowledge_items()
     voice_profile = crud.get_voice_profile()
+
+    verified_facts = [
+        f"- {k['title']}: {k['claim_content']}"
+        for k in all_knowledge
+        if k.get("category") == "verified_fact"
+    ]
+    personal_opinions = [
+        f"- {k['title']}: {k['claim_content']}"
+        for k in all_knowledge
+        if k.get("category") in ("personal_opinion", "reasonable_interpretation")
+    ]
+    restricted_claims = [
+        f"- [{k['category'].upper()}] {k['title']}: {k['claim_content']}"
+        for k in all_knowledge
+        if k.get("category") in ("unverified_hypothesis", "needs_approval")
+    ]
 
     pillar_name = CONTENT_PILLARS.get(payload.content_pillar or 1, "Business problems costing time/money")
 
-    # Construct strict anti-slop, anti-hallucination system prompt
+    # Construct strict anti-slop, anti-hallucination system prompt with full Brand & Knowledge injection
     system_prompt = (
         "You are an expert B2B LinkedIn content strategist and principal software builder.\n"
         "Your task is to write high-converting, grounded LinkedIn content for a software builder and automation specialist.\n\n"
@@ -47,7 +63,19 @@ async def generate_post(payload: PostGenerateRequest):
         "3. Write with concrete technical and operational clarity: mention observable signals, workflow bottlenecks, and system architecture.\n"
         "4. Avoid dramatic emoji walls, hashtags spam, engagement-bait questions ('Agree?', 'Thoughts?'), and manufactured controversy.\n"
         "5. The author builds AI systems, lead intelligence tools, and custom workflow software. Voice is pragmatic, direct, and builder-focused.\n\n"
-        "=== AUTHOR & PRODUCT CONTEXT ===\n"
+        "=== AUTHOR BRAND PROFILE & GUARDRAILS ===\n"
+        f"Author Headline: {brand.get('headline', 'AI-Powered Business Systems & Sales Intelligence Builder')}\n"
+        f"Ideal Client Profile: {brand.get('ideal_client_profile', 'Agency founders, B2B owners, dental practice leaders')}\n"
+        f"Topics to Emphasize: {brand.get('topics_to_discuss', 'Practical AI demonstrations, concrete bottlenecks')}\n"
+        f"Topics to Strictly Avoid: {brand.get('topics_to_avoid', 'Generic AI hype, fake revenue claims, engagement bait')}\n\n"
+        "=== VERIFIED KNOWLEDGE BASE ===\n"
+        "Verified Facts (Safe to cite directly):\n"
+        + ("\n".join(verified_facts) if verified_facts else "- Self-taught software builder and automation specialist.\n")
+        + "\n\nBuilder Perspectives & Interpretations:\n"
+        + ("\n".join(personal_opinions) if personal_opinions else "- Deterministic rules for facts; LLMs for synthesis.\n")
+        + "\n\nUnverified Hypotheses / Requires Approval (DO NOT state as completed live customer facts; frame as hypotheses or architecture targets):\n"
+        + ("\n".join(restricted_claims) if restricted_claims else "- None specified.\n")
+        + "\n\n=== PRODUCT CONTEXT ===\n"
         f"Selected Product: {product.get('name', 'Custom Systems')} - {product.get('description', '')}\n"
         f"Verified Product Capabilities: {', '.join(product.get('verified_capabilities', []))}\n"
         f"Concept Capabilities (MUST NOT BE CLAIMED AS LIVE): {', '.join(product.get('concept_capabilities', []))}\n"
@@ -88,6 +116,7 @@ async def generate_post(payload: PostGenerateRequest):
     completion = await deepseek_client.call_completion(
         messages=messages,
         temperature=0.7,
+        response_format={"type": "json_object"},
         endpoint_name="post_generation"
     )
 
@@ -280,3 +309,100 @@ def submit_voice_feedback(draft_id: int, feedback_tag: str = Query(...)):
     
     updated_profile = voice_engine.record_feedback(draft_id, feedback_tag)
     return {"success": True, "feedback_tag": feedback_tag, "updated_voice_profile": updated_profile}
+
+@router.post("/{draft_id}/regenerate-format", response_model=PostDraftResponse)
+async def regenerate_single_format(
+    draft_id: int,
+    format_type: str = Query(..., description="concise | story | problem_solution | technical_breakdown | demo | commercial"),
+    custom_instruction: Optional[str] = Query(None, description="Optional refinement instructions")
+):
+    draft = crud.get_post_draft_by_id(draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    valid_formats = {
+        "concise": "concise_draft",
+        "story": "story_draft",
+        "problem_solution": "problem_solution_draft",
+        "technical_breakdown": "technical_breakdown_draft",
+        "demo": "demo_draft",
+        "commercial": "commercial_draft"
+    }
+    if format_type not in valid_formats:
+        raise HTTPException(status_code=400, detail=f"Invalid format_type '{format_type}'")
+
+    col_name = valid_formats[format_type]
+    previous_text = draft.get(col_name) or draft.get("final_edited_content") or ""
+    product = crud.get_product_by_key(draft.get("product_key") or "podleads_ai") or {}
+    brand = crud.get_profile_brand() or {}
+
+    system_prompt = (
+        "You are an expert B2B LinkedIn content strategist and principal software builder.\n"
+        "Rewrite and sharpen ONLY the requested LinkedIn post format while strictly honoring verified product boundaries.\n"
+        "Never fabricate client names, revenue numbers, or claim concept features are live in production.\n"
+        "Return a valid JSON object with keys: 'full_text', 'hook', 'main_body', 'closing_line', 'call_to_action', 'suggested_visual'."
+    )
+    user_prompt = (
+        f"Original Idea: {draft.get('idea_prompt')}\n"
+        f"Target Audience: {draft.get('target_audience')}\n"
+        f"Product: {product.get('name', 'Custom Systems')} (Verified: {', '.join(product.get('verified_capabilities', []))}; Concept-Only: {', '.join(product.get('concept_capabilities', []))})\n"
+        f"Author Topics to Avoid: {brand.get('topics_to_avoid', '')}\n"
+        f"Format to Regenerate: {format_type}\n"
+        f"Previous Draft Version:\n{previous_text}\n\n"
+        f"Refinement Instruction: {custom_instruction or 'Make the hook sharper, increase concrete operational specificity, and keep paragraphs clean.'}\n\n"
+        "Return the regenerated post in JSON format."
+    )
+
+    completion = await deepseek_client.call_completion(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.7,
+        response_format={"type": "json_object"},
+        endpoint_name="regenerate_single_format"
+    )
+
+    new_text = ""
+    try:
+        raw = completion["content"].strip()
+        if "```json" in raw:
+            raw = raw.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw:
+            raw = raw.split("```")[1].split("```")[0].strip()
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            new_text = parsed.get("full_text") or ""
+            if not new_text and parsed.get("hook"):
+                new_text = f"{parsed.get('hook', '')}\n\n{parsed.get('main_body', '')}\n\n{parsed.get('closing_line', '')}\n\n{parsed.get('call_to_action', '')}".strip()
+    except Exception as exc:
+        logger.warning(f"Single-format JSON parse fallback: {exc}")
+
+    if not new_text:
+        fallback_map = deepseek_client.get_structured_drafts_fallback()
+        new_text = fallback_map.get(format_type, {}).get("full_text", previous_text)
+
+    # Record previous version in revision_history
+    history = list(draft.get("revision_history") or [])
+    if previous_text:
+        history.append({
+            "format_type": format_type,
+            "previous_text": previous_text,
+            "instruction": custom_instruction or "Standard regeneration"
+        })
+
+    score = scoring_engine.evaluate_draft(
+        draft_text=new_text,
+        target_audience=draft.get("target_audience") or "",
+        product_key=draft.get("product_key") or ""
+    )
+
+    updated = crud.update_post_draft(draft_id, {
+        col_name: new_text,
+        "active_draft_format": format_type,
+        "final_edited_content": new_text,
+        "buyer_score_total": score.total_score,
+        "buyer_score_breakdown": score.model_dump(),
+        "revision_history": history
+    })
+    return updated

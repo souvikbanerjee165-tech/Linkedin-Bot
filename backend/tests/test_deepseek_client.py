@@ -13,6 +13,10 @@ def test_cost_calculation():
     expected = (10_000 / 1e6 * 0.28) + (1_000 / 1e6 * 2.19)
     assert abs(small_cost - round(expected, 6)) < 1e-5
 
+    # Cache hit pricing: 1,000,000 cache hit tokens ($0.14) + 0 miss + 0 completion = $0.14
+    cache_cost = client.calculate_cost(1_000_000, 0, cache_hit_tokens=1_000_000, cache_miss_tokens=0)
+    assert abs(cache_cost - 0.14) < 0.001
+
 @pytest.mark.asyncio
 async def test_offline_mock_completion_fallback(monkeypatch):
     monkeypatch.setattr(settings, "deepseek_api_key", "")

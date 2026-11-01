@@ -41,5 +41,7 @@ async def inspect_website_url(payload: Dict[str, str] = Body(...)):
         })
 
         return signals
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to inspect website: {str(exc)}")

@@ -8,7 +8,7 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   }).then(r => r.json()),
-  getProfileAudit: () => fetch(`${API_BASE}/brand/audit`).then(r => r.json()),
+  getProfileAudit: (useAi = false) => fetch(`${API_BASE}/brand/audit${useAi ? '?use_ai=true' : ''}`).then(r => r.json()),
 
   // Knowledge Base
   getKnowledge: (category) => fetch(`${API_BASE}/knowledge${category ? `?category=${category}` : ''}`).then(r => r.json()),
@@ -47,6 +47,10 @@ export const api = {
   }).then(r => r.json()),
   scorePost: (id) => fetch(`${API_BASE}/posts/${id}/score`, { method: 'POST' }).then(r => r.json()),
   submitFeedback: (id, tag) => fetch(`${API_BASE}/posts/${id}/feedback?feedback_tag=${encodeURIComponent(tag)}`, { method: 'POST' }).then(r => r.json()),
+  regenerateFormat: (id, formatType, customInstruction = '') => fetch(
+    `${API_BASE}/posts/${id}/regenerate-format?format_type=${encodeURIComponent(formatType)}${customInstruction ? `&custom_instruction=${encodeURIComponent(customInstruction)}` : ''}`,
+    { method: 'POST' }
+  ).then(r => r.json()),
 
   // Content Calendar
   getCalendar: () => fetch(`${API_BASE}/calendar`).then(r => r.json()),

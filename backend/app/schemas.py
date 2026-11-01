@@ -196,6 +196,7 @@ class GenerateCalendarRequest(BaseModel):
     start_date: Optional[str] = None
     target_product_key: Optional[str] = None
     primary_focus_pillar: Optional[int] = None
+    use_ai: bool = False
 
 # 6. Post Generation & Scoring Schemas
 class PostGenerateRequest(BaseModel):
@@ -268,6 +269,7 @@ class PostDraftResponse(BaseModel):
     claims_flagged: Optional[List[str]]
     visual_suggestion: Optional[str]
     feedback_tag: Optional[str]
+    revision_history: Optional[List[Dict[str, Any]]] = []
     status: str
     created_at: Optional[str]
     updated_at: Optional[str]

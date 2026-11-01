@@ -151,6 +151,7 @@ def init_db():
         claims_flagged TEXT,
         visual_suggestion TEXT,
         feedback_tag TEXT,
+        revision_history TEXT DEFAULT '[]',
         status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'review_ready', 'approved', 'published', 'archived')),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -231,7 +232,17 @@ def init_db():
     """)
 
     conn.commit()
+    run_migrations(conn)
     conn.close()
+
+def run_migrations(conn: sqlite3.Connection):
+    """Lightweight schema migration helper ensuring new columns exist on existing databases."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(post_drafts)")
+    existing_cols = {row["name"] for row in cursor.fetchall()}
+    if "revision_history" not in existing_cols:
+        cursor.execute("ALTER TABLE post_drafts ADD COLUMN revision_history TEXT DEFAULT '[]'")
+        conn.commit()
 
 def seed_initial_data_if_empty():
     conn = get_connection()

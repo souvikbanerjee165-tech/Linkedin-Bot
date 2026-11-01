@@ -210,7 +210,7 @@ export default function Overview({ onNavigate }) {
                       </p>
                     </div>
                     <button
-                      onClick={() => onNavigate('write')}
+                      onClick={() => onNavigate('write', item.hook_idea, null)}
                       className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg whitespace-nowrap transition"
                     >
                       Draft Now
@@ -240,7 +240,7 @@ export default function Overview({ onNavigate }) {
                 {drafts.slice(0, 5).map(d => (
                   <div 
                     key={d.id} 
-                    onClick={() => onNavigate('write')}
+                    onClick={() => onNavigate('write', '', d.id)}
                     className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl hover:border-indigo-500/50 cursor-pointer transition group"
                   >
                     <div className="flex justify-between items-center text-xs mb-1">

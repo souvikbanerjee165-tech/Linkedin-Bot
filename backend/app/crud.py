@@ -335,6 +335,7 @@ def get_post_drafts(status: Optional[str] = None) -> List[Dict[str, Any]]:
         d["buyer_score_breakdown"] = json.loads(d["buyer_score_breakdown"]) if d.get("buyer_score_breakdown") else {}
         d["claims_flagged"] = json.loads(d["claims_flagged"]) if d.get("claims_flagged") else []
         d["metadata_json"] = json.loads(d["metadata_json"]) if d.get("metadata_json") else {}
+        d["revision_history"] = json.loads(d["revision_history"]) if d.get("revision_history") else []
         results.append(d)
     return results
 
@@ -348,6 +349,7 @@ def get_post_draft_by_id(draft_id: int) -> Optional[Dict[str, Any]]:
     d["buyer_score_breakdown"] = json.loads(d["buyer_score_breakdown"]) if d.get("buyer_score_breakdown") else {}
     d["claims_flagged"] = json.loads(d["claims_flagged"]) if d.get("claims_flagged") else []
     d["metadata_json"] = json.loads(d["metadata_json"]) if d.get("metadata_json") else {}
+    d["revision_history"] = json.loads(d["revision_history"]) if d.get("revision_history") else []
     return d
 
 def update_post_draft(draft_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -356,7 +358,7 @@ def update_post_draft(draft_id: int, updates: Dict[str, Any]) -> Optional[Dict[s
     values = []
     for k, v in updates.items():
         if v is not None:
-            if k in ("buyer_score_breakdown", "claims_flagged", "metadata_json"):
+            if k in ("buyer_score_breakdown", "claims_flagged", "metadata_json", "revision_history"):
                 set_clauses.append(f"{k} = ?")
                 values.append(json.dumps(v))
             else:

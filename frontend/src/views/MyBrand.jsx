@@ -10,8 +10,21 @@ export default function MyBrand() {
   const [products, setProducts] = useState([]);
   const [audit, setAudit] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [auditingAi, setAuditingAi] = useState(false);
   const [savedMessage, setSavedMessage] = useState('');
   const [activeTab, setActiveTab] = useState('profile'); // profile | products | audit
+
+  const handleRunAiAudit = async () => {
+    setAuditingAi(true);
+    try {
+      const freshAudit = await api.getProfileAudit(true);
+      setAudit(freshAudit);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAuditingAi(false);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -314,14 +327,24 @@ export default function MyBrand() {
                 {audit.buyer_relevance_summary}
               </p>
             </div>
-            <div className="text-center bg-slate-950/80 border border-indigo-500/30 p-5 rounded-2xl min-w-[140px]">
-              <div className="text-3xl font-extrabold text-indigo-400">
-                {audit.overall_score}
-                <span className="text-base font-normal text-slate-400">/100</span>
+            <div className="flex flex-col items-center gap-3">
+              <div className="text-center bg-slate-950/80 border border-indigo-500/30 p-5 rounded-2xl min-w-[140px]">
+                <div className="text-3xl font-extrabold text-indigo-400">
+                  {audit.overall_score}
+                  <span className="text-base font-normal text-slate-400">/100</span>
+                </div>
+                <div className="text-[11px] text-slate-400 uppercase tracking-wider mt-1 font-semibold">
+                  Buyer Impact Score
+                </div>
               </div>
-              <div className="text-[11px] text-slate-400 uppercase tracking-wider mt-1 font-semibold">
-                Buyer Impact Score
-              </div>
+              <button
+                onClick={handleRunAiAudit}
+                disabled={auditingAi}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                {auditingAi ? 'Running DeepSeek Audit...' : 'Run Live DeepSeek Audit'}
+              </button>
             </div>
           </div>
 

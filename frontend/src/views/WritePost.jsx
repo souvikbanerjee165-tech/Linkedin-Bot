@@ -30,9 +30,9 @@ const PILLARS = [
   { id: 10, name: "10. Soft commercial solution posts" }
 ];
 
-export default function WritePost() {
+export default function WritePost({ initialIdea = '', initialDraftId = null }) {
   const [ideaPrompt, setIdeaPrompt] = useState(
-    "I built a system that analyzes dental practice websites and identifies opportunities to improve their digital workflows. I want to explain why business owners should investigate specific operational problems before buying AI tools."
+    initialIdea || "I built a system that analyzes dental practice websites and identifies opportunities to improve their digital workflows. I want to explain why business owners should investigate specific operational problems before buying AI tools."
   );
   const [targetAudience, setTargetAudience] = useState("Agency Founders & Dental Practice Leaders");
   const [selectedProduct, setSelectedProduct] = useState("dental_sales_intel");
@@ -40,12 +40,58 @@ export default function WritePost() {
   const [voiceMatch, setVoiceMatch] = useState(0.85);
 
   const [loading, setLoading] = useState(false);
+  const [regeneratingFormat, setRegeneratingFormat] = useState(false);
+  const [savedDrafts, setSavedDrafts] = useState([]);
   const [generationResult, setGenerationResult] = useState(null);
   const [activeFormat, setActiveFormat] = useState("problem_solution");
   const [editedText, setEditedText] = useState("");
   const [copied, setCopied] = useState(false);
   const [feedbackSaved, setFeedbackSaved] = useState("");
   const [scoreData, setScoreData] = useState(null);
+
+  const hydrateFromStoredDraft = (draftObj) => {
+    if (!draftObj) return;
+    setIdeaPrompt(draftObj.idea_prompt || "");
+    if (draftObj.product_key) setSelectedProduct(draftObj.product_key);
+    if (draftObj.target_audience) setTargetAudience(draftObj.target_audience);
+    const reconstructedDrafts = {
+      concise: { format_type: "concise", title: "Concise Text", full_text: draftObj.concise_draft || "", claims_to_verify: draftObj.claims_flagged || [], suggested_visual: draftObj.visual_suggestion || "" },
+      story: { format_type: "story", title: "Builder's Lesson", full_text: draftObj.story_draft || "", claims_to_verify: draftObj.claims_flagged || [], suggested_visual: draftObj.visual_suggestion || "" },
+      problem_solution: { format_type: "problem_solution", title: "Problem & Solution", full_text: draftObj.problem_solution_draft || "", claims_to_verify: draftObj.claims_flagged || [], suggested_visual: draftObj.visual_suggestion || "" },
+      technical_breakdown: { format_type: "technical_breakdown", title: "Technical Architecture", full_text: draftObj.technical_breakdown_draft || "", claims_to_verify: draftObj.claims_flagged || [], suggested_visual: draftObj.visual_suggestion || "" },
+      demo: { format_type: "demo", title: "Demonstration-Led", full_text: draftObj.demo_draft || "", claims_to_verify: draftObj.claims_flagged || [], suggested_visual: draftObj.visual_suggestion || "" },
+      commercial: { format_type: "commercial", title: "Commercial Offer", full_text: draftObj.commercial_draft || "", claims_to_verify: draftObj.claims_flagged || [], suggested_visual: draftObj.visual_suggestion || "" },
+    };
+    const fmt = draftObj.active_draft_format || "problem_solution";
+    setGenerationResult({
+      draft_id: draftObj.id,
+      idea_prompt: draftObj.idea_prompt,
+      product_key: draftObj.product_key,
+      drafts: reconstructedDrafts,
+      claims_flagged: draftObj.claims_flagged || []
+    });
+    setActiveFormat(fmt);
+    setEditedText(draftObj.final_edited_content || reconstructedDrafts[fmt]?.full_text || "");
+    setScoreData(draftObj.buyer_score_breakdown || null);
+  };
+
+  useEffect(() => {
+    api.getPosts().then(list => {
+      if (Array.isArray(list)) {
+        setSavedDrafts(list);
+        if (initialDraftId) {
+          const found = list.find(d => d.id === Number(initialDraftId));
+          if (found) hydrateFromStoredDraft(found);
+        }
+      }
+    }).catch(console.error);
+  }, [initialDraftId]);
+
+  useEffect(() => {
+    if (initialIdea) {
+      setIdeaPrompt(initialIdea);
+    }
+  }, [initialIdea]);
 
   // Playwright URL inspector state
   const [inspectUrl, setInspectUrl] = useState("");
@@ -80,6 +126,7 @@ export default function WritePost() {
       // Score
       const draftObj = await api.getPost(res.draft_id);
       setScoreData(draftObj.buyer_score_breakdown);
+      api.getPosts().then(list => Array.isArray(list) && setSavedDrafts(list)).catch(() => {});
     } catch (err) {
       alert("Error generating drafts. Please check your connection or settings.");
     } finally {
@@ -151,6 +198,22 @@ export default function WritePost() {
     }
   };
 
+  const handleRegenerateSingleFormat = async () => {
+    if (!generationResult) return;
+    setRegeneratingFormat(true);
+    setFeedbackSaved("");
+    try {
+      const updatedDraft = await api.regenerateFormat(generationResult.draft_id, activeFormat);
+      hydrateFromStoredDraft(updatedDraft);
+      setFeedbackSaved(`Regenerated ${FORMAT_LABELS[activeFormat]} format & logged previous version!`);
+      setTimeout(() => setFeedbackSaved(""), 3500);
+    } catch (err) {
+      alert("Failed to regenerate format.");
+    } finally {
+      setRegeneratingFormat(false);
+    }
+  };
+
   const currentDraft = generationResult ? generationResult.drafts[activeFormat] : null;
 
   // Render truncated text for LinkedIn feed preview
@@ -161,15 +224,39 @@ export default function WritePost() {
 
   return (
     <div className="space-y-8 animate-fadeIn">
-      {/* Title */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
-          <Sparkles className="w-8 h-8 text-indigo-400" />
-          LinkedIn Post Generator & Feed Preview
-        </h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Generate 6 distinct B2B drafts with live DeepSeek AI, audit prospect websites with Playwright, and test mobile/desktop hook cutoffs.
-        </p>
+      {/* Title & Saved Drafts Selector */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
+            <Sparkles className="w-8 h-8 text-indigo-400" />
+            LinkedIn Post Generator & Feed Preview
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">
+            Generate 6 distinct B2B drafts with live DeepSeek AI, audit prospect websites with Playwright, and test mobile/desktop hook cutoffs.
+          </p>
+        </div>
+
+        {savedDrafts.length > 0 && (
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2">
+            <FileText className="w-4 h-4 text-indigo-400" />
+            <select
+              value={generationResult?.draft_id || ""}
+              onChange={e => {
+                const id = Number(e.target.value);
+                const found = savedDrafts.find(d => d.id === id);
+                if (found) hydrateFromStoredDraft(found);
+              }}
+              className="bg-transparent text-xs text-slate-200 focus:outline-none max-w-[240px]"
+            >
+              <option value="" className="bg-slate-950">Load Saved Draft ({savedDrafts.length})...</option>
+              {savedDrafts.map(d => (
+                <option key={d.id} value={d.id} className="bg-slate-950">
+                  #{d.id} ({d.buyer_score_total || 0}/100): {(d.idea_prompt || '').slice(0, 38)}...
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Playwright Headless Signal Inspector Banner */}
@@ -438,12 +525,22 @@ export default function WritePost() {
 
                 {/* Action Buttons */}
                 <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-slate-800">
-                  <button
-                    onClick={handleSaveAndRescore}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl transition"
-                  >
-                    Save Edits & Refresh Score
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleSaveAndRescore}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl transition"
+                    >
+                      Save Edits & Refresh Score
+                    </button>
+                    <button
+                      onClick={handleRegenerateSingleFormat}
+                      disabled={regeneratingFormat}
+                      className="px-4 py-2 bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-500/30 text-indigo-300 text-xs font-medium rounded-xl flex items-center gap-1.5 transition disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${regeneratingFormat ? 'animate-spin' : ''}`} />
+                      {regeneratingFormat ? 'Regenerating Format...' : 'Regenerate This Format'}
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-2">
                     <button

@@ -195,3 +195,48 @@ def test_crm_leads():
     put_res = client.put(f"/api/performance/leads/{lead_id}", json={"stage": "call_booked"})
     assert put_res.status_code == 200
     assert put_res.json()["stage"] == "call_booked"
+
+def test_regenerate_single_format_and_revision_history():
+    gen_res = client.post("/api/posts/generate", json={
+        "idea_prompt": "Testing single-format regeneration and revision history tracking.",
+        "product_key": "podleads_ai",
+        "target_audience": "Agency Founders",
+        "content_pillar": 3
+    })
+    assert gen_res.status_code == 200
+    draft_id = gen_res.json()["draft_id"]
+
+    regen_res = client.post(f"/api/posts/{draft_id}/regenerate-format?format_type=concise&custom_instruction=Make%20hook%20tighter")
+    assert regen_res.status_code == 200
+    updated_draft = regen_res.json()
+    assert updated_draft["active_draft_format"] == "concise"
+    assert isinstance(updated_draft["revision_history"], list)
+    assert len(updated_draft["revision_history"]) >= 1
+    assert updated_draft["revision_history"][0]["format_type"] == "concise"
+
+def test_ssrf_protection_blocks_private_and_loopback_urls():
+    from app.services.signal_inspector import validate_public_url
+
+    for blocked in [
+        "http://127.0.0.1:8080/api/health",
+        "http://localhost:8000",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://192.168.1.1/admin",
+        "http://10.0.0.1/internal",
+        "file:///etc/passwd"
+    ]:
+        with pytest.raises(ValueError):
+            validate_public_url(blocked)
+
+    # API endpoint returns 400 on SSRF attempt
+    res = client.post("/api/research/inspect-url", json={"url": "http://127.0.0.1:8080"})
+    assert res.status_code == 400
+
+def test_passcode_middleware_guard(monkeypatch):
+    monkeypatch.setattr(settings, "app_passcode", "secret-test-pass")
+    # Health check remains public
+    assert client.get("/api/health").status_code == 200
+    # Protected endpoint without header returns 401
+    assert client.get("/api/brand").status_code == 401
+    # Protected endpoint with valid header returns 200
+    assert client.get("/api/brand", headers={"X-App-Passcode": "secret-test-pass"}).status_code == 200

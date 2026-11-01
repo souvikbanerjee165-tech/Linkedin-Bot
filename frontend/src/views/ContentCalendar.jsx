@@ -18,11 +18,11 @@ export default function ContentCalendar({ onDraftPost }) {
     api.getCalendar().then(setCalendar).catch(console.error);
   };
 
-  const handleGenerate = async (days) => {
+  const handleGenerate = async (days, useAi = false) => {
     setLoading(true);
     setDaysCount(days);
     try {
-      const generated = await api.generateCalendar({ days_count: days });
+      const generated = await api.generateCalendar({ days_count: days, use_ai: useAi });
       setCalendar(generated);
     } catch (err) {
       alert("Error generating content plan");
@@ -56,7 +56,7 @@ export default function ContentCalendar({ onDraftPost }) {
 
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => handleGenerate(7)}
+            onClick={() => handleGenerate(7, false)}
             disabled={loading}
             className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/20 transition flex items-center gap-2"
           >
@@ -64,7 +64,15 @@ export default function ContentCalendar({ onDraftPost }) {
             Generate 7-Day Plan
           </button>
           <button
-            onClick={() => handleGenerate(30)}
+            onClick={() => handleGenerate(7, true)}
+            disabled={loading}
+            className="px-3.5 py-2 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            DeepSeek AI 7-Day Plan
+          </button>
+          <button
+            onClick={() => handleGenerate(30, false)}
             disabled={loading}
             className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition"
           >

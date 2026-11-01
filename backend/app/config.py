@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     app_env: str = "production"
     debug: bool = False
     
+    # Optional security passcode for public tunnel deployments
+    app_passcode: str = Field(default="", validation_alias="APP_PASSCODE")
+    
     # Storage
     database_path: str = str(BASE_DIR / "linkedin_copilot.db")
     backup_dir: str = str(BASE_DIR / "backups")
@@ -37,5 +40,9 @@ class Settings(BaseSettings):
     @property
     def is_api_key_configured(self) -> bool:
         return bool(self.deepseek_api_key and self.deepseek_api_key.strip())
+
+    @property
+    def is_passcode_enabled(self) -> bool:
+        return bool(self.app_passcode and self.app_passcode.strip())
 
 settings = Settings()

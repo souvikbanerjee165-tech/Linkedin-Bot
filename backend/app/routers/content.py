@@ -1,11 +1,16 @@
 from fastapi import APIRouter, HTTPException
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
+import json
+import logging
 from app import crud
+from app.config import settings
 from app.schemas import (
     CalendarItemResponse, CalendarItemCreate, CalendarItemUpdate, GenerateCalendarRequest
 )
+from app.services.deepseek_client import deepseek_client
 
+logger = logging.getLogger("content_router")
 router = APIRouter(prefix="/api/calendar", tags=["Content Calendar"])
 
 PILLARS_CATALOG = [
@@ -86,32 +91,89 @@ def get_calendar():
     return crud.get_calendar_items()
 
 @router.post("/generate", response_model=List[CalendarItemResponse])
-def generate_calendar(payload: GenerateCalendarRequest):
+async def generate_calendar(payload: GenerateCalendarRequest):
     days = max(7, min(30, payload.days_count))
     crud.clear_calendar_items()
 
+    research_items = crud.get_research_items()
+    products = crud.get_products()
+    product_keys = [p["product_key"] for p in products] or ["podleads_ai", "dental_sales_intel"]
+
     today = datetime.now(timezone.utc)
     calendar_entries = []
+
+    ai_items_map = {}
+    if payload.use_ai and settings.is_api_key_configured:
+        try:
+            research_digest = "; ".join([
+                f"{r.get('title')}: {r.get('synthesized_problems') or r.get('analyst_notes')}"
+                for r in research_items[:6]
+            ]) or "General B2B workflow bottlenecks and signal-based sales intelligence."
+            sys_prompt = (
+                "You are a B2B LinkedIn content strategist. Generate a structured content calendar in JSON format.\n"
+                "Return a JSON object with key 'items' containing a list of objects, each with:\n"
+                "'day_number' (int), 'target_reader' (str), 'pain_point' (str), 'hook_idea' (str), "
+                "'core_argument' (str), 'recommended_format' (one of concise, story, problem_solution, technical_breakdown, demo, commercial)."
+            )
+            usr_prompt = (
+                f"Generate {days} calendar entries grounded in our products ({', '.join(product_keys)}) "
+                f"and recent research findings: {research_digest}. Return valid JSON."
+            )
+            completion = await deepseek_client.call_completion(
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": usr_prompt}
+                ],
+                temperature=0.7,
+                response_format={"type": "json_object"},
+                endpoint_name="calendar_generation"
+            )
+            raw = completion["content"].strip()
+            if "```json" in raw:
+                raw = raw.split("```json")[1].split("```")[0].strip()
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict) and isinstance(parsed.get("items"), list):
+                for idx, item in enumerate(parsed["items"]):
+                    if isinstance(item, dict):
+                        ai_items_map[idx] = item
+        except Exception as exc:
+            logger.warning(f"Calendar AI generation fallback triggered: {exc}")
 
     for day_idx in range(days):
         date_str = (today + timedelta(days=day_idx + 1)).strftime("%Y-%m-%d")
         pillar_spec = PILLARS_CATALOG[day_idx % len(PILLARS_CATALOG)]
         
         target_reader = "Agency Founders & Growth Directors" if day_idx % 2 == 0 else "B2B Business Owners & Dental Practice Leaders"
-        product_key = "podleads_ai" if day_idx % 2 == 0 else "dental_sales_intel"
-        
+        product_key = payload.target_product_key or ("podleads_ai" if day_idx % 2 == 0 else "dental_sales_intel")
+        product_label = "PodLeads AI" if product_key == "podleads_ai" else "Dental Sales Intelligence"
+
+        # Incorporate saved Research Vault insights when available
+        research_note = research_items[day_idx % len(research_items)] if research_items else None
+        default_pain = (
+            research_note.get("synthesized_problems")
+            if research_note and research_note.get("synthesized_problems")
+            else f"Wasting manual hours and missing opportunities in operational step #{day_idx + 1}."
+        )
+        default_hook = pillar_spec["hook_template"].replace("{audience}", target_reader).replace("{hours}", "15 hours").replace("{product}", product_label)
+        if research_note and day_idx < len(research_items) and research_note.get("analyst_notes"):
+            default_arg = f"{research_note.get('analyst_notes')} Focusing on observable signals and robust architecture produces reliable leverage."
+        else:
+            default_arg = "Focusing on observable signals and robust architecture produces reliable leverage, whereas superficial AI hacks create technical debt."
+
+        ai_override = ai_items_map.get(day_idx, {})
+
         entry = {
             "scheduled_date": date_str,
             "day_number": day_idx + 1,
-            "target_reader": target_reader,
-            "pain_point": f"Wasting manual hours and missing opportunities in operational step #{day_idx + 1}.",
+            "target_reader": ai_override.get("target_reader") or target_reader,
+            "pain_point": ai_override.get("pain_point") or default_pain,
             "pillar_id": pillar_spec["id"],
             "pillar_name": pillar_spec["name"],
-            "hook_idea": pillar_spec["hook_template"].replace("{audience}", target_reader).replace("{hours}", "15 hours").replace("{product}", "PodLeads AI"),
-            "core_argument": "Focusing on observable signals and robust architecture produces reliable leverage, whereas superficial AI hacks create technical debt.",
+            "hook_idea": ai_override.get("hook_idea") or default_hook,
+            "core_argument": ai_override.get("core_argument") or default_arg,
             "evidence_needed": "Architecture snippet, observable signal audit screenshot, or verified benchmark metric.",
             "intended_response": "Reader comments with an operational bottleneck or sends a direct message requesting an audit.",
-            "recommended_format": pillar_spec["format"],
+            "recommended_format": ai_override.get("recommended_format") or pillar_spec["format"],
             "commercial_intent": pillar_spec["intent"],
             "product_key": product_key,
             "status": "scheduled",

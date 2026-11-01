@@ -31,12 +31,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [prefilledHook, setPrefilledHook] = useState('');
+  const [selectedDraftId, setSelectedDraftId] = useState(null);
 
-  const handleNavigate = (tab, prefill = '') => {
+  const handleNavigate = (tab, prefill = '', draftId = null) => {
     setActiveTab(tab);
     if (prefill) {
       setPrefilledHook(prefill);
     }
+    setSelectedDraftId(draftId);
     setMobileMenuOpen(false);
   };
 
@@ -148,8 +150,8 @@ export default function App() {
           {activeTab === 'overview' && <Overview onNavigate={handleNavigate} />}
           {activeTab === 'brand' && <MyBrand />}
           {activeTab === 'knowledge' && <KnowledgeBase />}
-          {activeTab === 'calendar' && <ContentCalendar onDraftPost={(hook) => handleNavigate('write', hook)} />}
-          {activeTab === 'write' && <WritePost key={prefilledHook} initialIdea={prefilledHook} />}
+          {activeTab === 'calendar' && <ContentCalendar onDraftPost={(hook) => handleNavigate('write', hook, null)} />}
+          {activeTab === 'write' && <WritePost key={`${prefilledHook}-${selectedDraftId || ''}`} initialIdea={prefilledHook} initialDraftId={selectedDraftId} />}
           {activeTab === 'research' && <Research />}
           {activeTab === 'performance' && <Performance />}
           {activeTab === 'exports' && <Exports />}

@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 import json
 import logging
@@ -15,9 +16,23 @@ class DeepSeekClient:
         self.timeout = settings.deepseek_timeout_seconds
         self.max_retries = settings.deepseek_max_retries
 
-    def calculate_cost(self, prompt_tokens: int, completion_tokens: int) -> float:
-        # DeepSeek pricing per 1M tokens
-        input_cost = (prompt_tokens / 1_000_000.0) * settings.cost_per_1m_input_cache_miss
+    def calculate_cost(
+        self,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cache_hit_tokens: Optional[int] = None,
+        cache_miss_tokens: Optional[int] = None
+    ) -> float:
+        # DeepSeek pricing per 1M tokens (aware of prompt cache hit vs miss)
+        if cache_hit_tokens is not None or cache_miss_tokens is not None:
+            hits = cache_hit_tokens or 0
+            misses = cache_miss_tokens if cache_miss_tokens is not None else max(0, prompt_tokens - hits)
+            input_cost = (
+                (hits / 1_000_000.0) * settings.cost_per_1m_input_cache_hit
+                + (misses / 1_000_000.0) * settings.cost_per_1m_input_cache_miss
+            )
+        else:
+            input_cost = (prompt_tokens / 1_000_000.0) * settings.cost_per_1m_input_cache_miss
         output_cost = (completion_tokens / 1_000_000.0) * settings.cost_per_1m_output
         return round(input_cost + output_cost, 6)
 
@@ -29,8 +44,8 @@ class DeepSeekClient:
         endpoint_name: str = "chat_completion"
     ) -> Dict[str, Any]:
         """
-        Calls the official DeepSeek API with retry logic, timeout, cost accounting,
-        and graceful mock fallback if no API key is provided.
+        Calls the official DeepSeek API with retry logic, exponential backoff, timeout,
+        prompt-cache-aware cost accounting, and graceful mock fallback if no API key is provided.
         """
         if not settings.is_api_key_configured:
             logger.info("DEEPSEEK_API_KEY not configured. Using offline fallback generation engine.")
@@ -65,7 +80,14 @@ class DeepSeekClient:
                         usage = data.get("usage", {})
                         prompt_tokens = usage.get("prompt_tokens", 0)
                         completion_tokens = usage.get("completion_tokens", 0)
-                        cost = self.calculate_cost(prompt_tokens, completion_tokens)
+                        cache_hit_tokens = usage.get("prompt_cache_hit_tokens")
+                        cache_miss_tokens = usage.get("prompt_cache_miss_tokens")
+                        cost = self.calculate_cost(
+                            prompt_tokens,
+                            completion_tokens,
+                            cache_hit_tokens=cache_hit_tokens,
+                            cache_miss_tokens=cache_miss_tokens
+                        )
                         
                         # Log API usage to SQLite
                         crud.record_api_usage(
@@ -92,9 +114,13 @@ class DeepSeekClient:
                         logger.warning(f"Attempt {attempt + 1} failed: {error_msg}")
                         if response.status_code in (400, 401, 403):
                             raise RuntimeError(f"DeepSeek Authentication/Request Error: {response.text}")
+                        if attempt < self.max_retries:
+                            await asyncio.sleep(1.5 * (attempt + 1))
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
                 last_error = str(exc)
                 logger.warning(f"Network error on attempt {attempt + 1}: {exc}")
+                if attempt < self.max_retries:
+                    await asyncio.sleep(1.5 * (attempt + 1))
 
         raise RuntimeError(f"DeepSeek API request failed after {self.max_retries + 1} attempts: {last_error}")
 

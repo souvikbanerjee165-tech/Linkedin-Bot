@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,6 +9,7 @@ import os
 from app.config import settings
 from app.database import init_db, seed_initial_data_if_empty
 from app.routers import brand, knowledge, products, posts, content, research, performance, exports, system
+from app.services.signal_inspector import signal_inspector
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -15,6 +17,7 @@ async def lifespan(app: FastAPI):
     init_db()
     seed_initial_data_if_empty()
     yield
+    await signal_inspector.close()
 
 app = FastAPI(
     title=settings.app_name,
@@ -22,6 +25,18 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+@app.middleware("http")
+async def passcode_guard_middleware(request: Request, call_next):
+    if settings.is_passcode_enabled and request.url.path.startswith("/api/"):
+        if request.url.path != "/api/health" and request.method != "OPTIONS":
+            provided = request.headers.get("X-App-Passcode") or request.query_params.get("passcode")
+            if provided != settings.app_passcode:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Unauthorized: Valid X-App-Passcode required when APP_PASSCODE is enabled."}
+                )
+    return await call_next(request)
 
 # CORS Middleware (permits local frontend dev server)
 app.add_middleware(

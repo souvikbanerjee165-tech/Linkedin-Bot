@@ -1,8 +1,13 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Any, List
+import json
+import logging
 from app import crud
+from app.config import settings
 from app.schemas import ProfileBrandResponse, ProfileBrandUpdate, ProfileIntelligenceReport, PositioningOption, ProfileAuditCategory
+from app.services.deepseek_client import deepseek_client
 
+logger = logging.getLogger("brand_router")
 router = APIRouter(prefix="/api/brand", tags=["Brand"])
 
 @router.get("", response_model=ProfileBrandResponse)
@@ -18,9 +23,10 @@ def update_brand(payload: ProfileBrandUpdate):
     return updated
 
 @router.get("/audit", response_model=ProfileIntelligenceReport)
-def get_profile_audit():
+async def get_profile_audit(use_ai: bool = Query(False, description="Run live DeepSeek profile audit using current brand & knowledge")):
     brand = crud.get_profile_brand() or {}
     products = crud.get_products()
+    knowledge_items = crud.get_knowledge_items()
     
     # 3 Positioning Options
     positioning_options = [
@@ -127,9 +133,64 @@ def get_profile_audit():
         "If your team is losing 10+ hours a week to manual workflow drag, send me a message or connect. Let's look at the bottleneck."
     )
 
+    overall_score = 86
+    recommended_positioning = "Option A: AI Automation & Custom Business Systems Builder"
+    buyer_relevance_summary = "Your profile establishes high credibility by combining actual software engineering capability with grounded commercial awareness. Recommending Option A gives you the widest commercial foundation while leveraging your specialized products as tangible proof."
+
+    if use_ai and settings.is_api_key_configured:
+        try:
+            verified_facts = [f"{k['title']}: {k['claim_content']}" for k in knowledge_items if k.get("category") == "verified_fact"]
+            product_summaries = [f"{p['name']} ({p['tagline']}): Verified={p['verified_capabilities']}, Concept={p['concept_capabilities']}" for p in products]
+            sys_prompt = (
+                "You are a principal B2B LinkedIn positioning strategist. Analyze the user's current brand profile, "
+                "verified knowledge base, and software products. Never invent clients, revenue, or live case studies.\n"
+                "Return a valid JSON object containing:\n"
+                "- overall_score (integer 60-98)\n"
+                "- recommended_positioning (string)\n"
+                "- rewritten_about_section (string, 3-5 punchy paragraphs)\n"
+                "- headline_alternatives (list of 3 dicts with 'angle' and 'headline')\n"
+                "- buyer_relevance_summary (string)\n"
+            )
+            usr_prompt = (
+                f"Current Headline: {brand.get('headline')}\n"
+                f"Current About: {brand.get('about_text')}\n"
+                f"Experience: {brand.get('experience_summary')}\n"
+                f"Services: {brand.get('current_services')}\n"
+                f"Target Markets: {brand.get('target_markets')}\n"
+                f"Ideal Client: {brand.get('ideal_client_profile')}\n"
+                f"Products: {'; '.join(product_summaries)}\n"
+                f"Verified Facts: {'; '.join(verified_facts)}\n"
+                "Generate the tailored JSON profile audit report."
+            )
+            completion = await deepseek_client.call_completion(
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": usr_prompt}
+                ],
+                temperature=0.6,
+                response_format={"type": "json_object"},
+                endpoint_name="brand_profile_audit"
+            )
+            raw = completion["content"].strip()
+            if "```json" in raw:
+                raw = raw.split("```json")[1].split("```")[0].strip()
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                overall_score = int(parsed.get("overall_score") or overall_score)
+                recommended_positioning = parsed.get("recommended_positioning") or recommended_positioning
+                rewritten_about = parsed.get("rewritten_about_section") or rewritten_about
+                if isinstance(parsed.get("headline_alternatives"), list) and len(parsed["headline_alternatives"]) > 0:
+                    headline_alternatives = [
+                        {"angle": str(h.get("angle", "Alternative")), "headline": str(h.get("headline", ""))}
+                        for h in parsed["headline_alternatives"] if isinstance(h, dict) and h.get("headline")
+                    ] or headline_alternatives
+                buyer_relevance_summary = parsed.get("buyer_relevance_summary") or buyer_relevance_summary
+        except Exception as exc:
+            logger.warning(f"AI brand audit fallback triggered: {exc}")
+
     return ProfileIntelligenceReport(
-        overall_score=86,
-        recommended_positioning="Option A: AI Automation & Custom Business Systems Builder",
+        overall_score=overall_score,
+        recommended_positioning=recommended_positioning,
         positioning_options=positioning_options,
         category_audits=category_audits,
         headline_alternatives=headline_alternatives,
@@ -152,5 +213,5 @@ def get_profile_audit():
             "Ensure concept features in Dental OS are clearly demarcated from live verified tools.",
             "Avoid sharing theoretical revenue projections without verified customer confirmation."
         ],
-        buyer_relevance_summary="Your profile establishes high credibility by combining actual software engineering capability with grounded commercial awareness. Recommending Option A gives you the widest commercial foundation while leveraging your specialized products as tangible proof."
+        buyer_relevance_summary=buyer_relevance_summary
     )
