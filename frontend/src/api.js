@@ -77,6 +77,11 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url })
   }).then(r => r.json()),
+  analyzeDiscussion: (data) => fetch(`${API_BASE}/research/radar/analyze-discussion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(r => r.json()),
 
   // Performance & Inbound CRM
   getPerformance: () => fetch(`${API_BASE}/performance`).then(r => r.json()),
@@ -94,6 +99,11 @@ export const api = {
   }).then(r => r.json()),
   updateLead: (id, data) => fetch(`${API_BASE}/performance/leads/${id}`, {
     method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(r => r.json()),
+  evaluateLead: (data) => fetch(`${API_BASE}/performance/leads/evaluate`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   }).then(r => r.json()),

@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 from app import crud
 from app.schemas import ResearchItemResponse, ResearchItemCreate
 from app.services.signal_inspector import signal_inspector
+from app.services.feed_radar import feed_radar
 
 router = APIRouter(prefix="/api/research", tags=["Research"])
 
@@ -45,3 +46,16 @@ async def inspect_website_url(payload: Dict[str, str] = Body(...)):
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to inspect website: {str(exc)}")
+
+@router.post("/radar/analyze-discussion")
+async def analyze_discussion(payload: Dict[str, Any] = Body(...)):
+    post_text = payload.get("post_content")
+    if not post_text:
+        raise HTTPException(status_code=400, detail="post_content is required")
+
+    result = await feed_radar.analyze_and_draft_response(
+        post_content=post_text,
+        poster_role=payload.get("poster_role", "B2B Decision Maker"),
+        target_product=payload.get("target_product", "dental_sales_intel")
+    )
+    return result

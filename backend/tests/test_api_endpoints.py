@@ -211,6 +211,26 @@ def test_crm_leads():
     assert put_res.status_code == 200
     assert put_res.json()["stage"] == "call_booked"
 
+def test_feed_radar_analyze_discussion():
+    res = client.post("/api/research/radar/analyze-discussion", json={
+        "post_content": "Every business should fire their sales reps and replace them with autonomous AI SDRs today.",
+        "poster_role": "AI Influencer",
+        "target_product": "podleads_ai"
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert "core_thesis" in data
+    assert "target_vulnerability" in data
+    assert len(data.get("comments", [])) >= 1
+
+def test_prospect_evaluate_endpoint_ssrf_blocked():
+    # Blocking internal addresses
+    res = client.post("/api/performance/leads/evaluate", json={
+        "website_url": "http://127.0.0.1:8080/api/health",
+        "prospect_name": "Test Prospect"
+    })
+    assert res.status_code == 400
+
 def test_regenerate_single_format_and_revision_history():
     gen_res = client.post("/api/posts/generate", json={
         "idea_prompt": "Testing single-format regeneration and revision history tracking.",

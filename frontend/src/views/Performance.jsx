@@ -22,6 +22,8 @@ export default function Performance() {
 
   const [showLogModal, setShowLogModal] = useState(false);
   const [showLeadModal, setShowLeadModal] = useState(false);
+  const [evaluatingLead, setEvaluatingLead] = useState(false);
+  const [evaluatedResult, setEvaluatedResult] = useState(null);
 
   const [newLog, setNewLog] = useState({
     post_draft_id: null,
@@ -87,6 +89,7 @@ export default function Performance() {
     try {
       await api.createLead(newLead);
       setShowLeadModal(false);
+      setEvaluatedResult(null);
       setNewLead({
         prospect_name: '',
         company: '',
@@ -100,6 +103,35 @@ export default function Performance() {
       loadData();
     } catch (err) {
       alert("Error recording inbound lead");
+    }
+  };
+
+  const handleEvaluateProspectWebsite = async () => {
+    if (!newLead.website_url) {
+      alert("Please enter a website or channel URL to inspect");
+      return;
+    }
+    setEvaluatingLead(true);
+    try {
+      const res = await api.evaluateLead({
+        website_url: newLead.website_url,
+        prospect_name: newLead.prospect_name || "Prospect",
+        company: newLead.company || "",
+        role_title: newLead.role_title || "Decision Maker",
+        product_focus: "dental_sales_intel"
+      });
+      setEvaluatedResult(res);
+      if (res.custom_outreach_pitch) {
+        setNewLead(prev => ({
+          ...prev,
+          notes: `Evaluated Score: ${res.buying_intent_score}/100\nPitch: ${res.custom_outreach_pitch}`
+        }));
+      }
+      loadData();
+    } catch (err) {
+      alert("Error evaluating prospect website with Playwright & DeepSeek: " + (err.message || err));
+    } finally {
+      setEvaluatingLead(false);
     }
   };
 
@@ -359,6 +391,39 @@ export default function Performance() {
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-xs font-semibold text-slate-300 uppercase">
+                  <span>Prospect Website / Digital Presence</span>
+                  <button
+                    type="button"
+                    onClick={handleEvaluateProspectWebsite}
+                    disabled={evaluatingLead || !newLead.website_url}
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 disabled:opacity-50"
+                  >
+                    {evaluatingLead ? 'Scraping & Scoring...' : 'Auto-Inspect & Score Lead'}
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. https://apexsmilecenter.com or youtube.com/@channel"
+                  value={newLead.website_url}
+                  onChange={e => setNewLead({ ...newLead, website_url: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+
+              {evaluatedResult && (
+                <div className="bg-slate-950/90 border border-emerald-900/40 rounded-xl p-3 text-xs text-slate-300 space-y-1.5">
+                  <div className="flex justify-between text-emerald-400 font-bold">
+                    <span>Playwright Signal Score</span>
+                    <span>{evaluatedResult.buying_intent_score}/100 Buying Opportunity</span>
+                  </div>
+                  <p className="text-slate-300 text-[11px]">
+                    <strong className="text-indigo-400">Generated Outreach Pitch:</strong> {evaluatedResult.custom_outreach_pitch}
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">

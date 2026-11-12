@@ -217,7 +217,37 @@ class DeepSeekClient:
                 user_message = m.get("content", "")
                 break
 
-        if endpoint_name == "post_generation" or "draft" in user_message.lower():
+        if endpoint_name == "feed_conversation_radar":
+            content_str = json.dumps({
+                "core_thesis": "Operational discussion around B2B workflows",
+                "target_vulnerability": "Over-reliance on manual sorting before qualification",
+                "comments": [
+                    {"style": "Builder Reality", "text": "The bottleneck usually isn't generating more messages—it's verifying if the account actually has the problem before reaching out."},
+                    {"style": "Technical Clarification", "text": "Deterministic data filters first, language models for synthesis second."},
+                    {"style": "Tactical Question", "text": "Curious how your team handles triage outside business hours?"}
+                ]
+            })
+        elif endpoint_name == "prospect_lead_evaluation":
+            content_str = json.dumps({
+                "buying_intent_score": 85,
+                "urgency_reason": "Missing automated booking and after-hours triage",
+                "custom_outreach_pitch": "Noticed your clinic website relies strictly on manual phone triage after 5 PM."
+            })
+        elif endpoint_name == "agent_researcher":
+            content_str = json.dumps({
+                "core_bottleneck": "Manual lead sorting",
+                "observable_signal": "Missing booking triggers",
+                "tactical_takeaway": "Test signals before prompts."
+            })
+        elif endpoint_name == "agent_hook_specialist":
+            content_str = json.dumps({
+                "hooks": [
+                    "Before buying AI software for your sales team, check your observable digital signals first.",
+                    "Why 80% of sales outreach fails before the first prompt is written.",
+                    "The unglamorous reason automated pipelines break down in production."
+                ]
+            })
+        elif endpoint_name == "post_generation" or "draft" in user_message.lower():
             content_str = json.dumps(self.get_structured_drafts_fallback())
         else:
             content_str = "Clear, pragmatic analysis grounded in verified business constraints and observable technical signals."

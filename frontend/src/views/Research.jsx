@@ -8,6 +8,12 @@ import {
 export default function Research() {
   const [researchItems, setResearchItems] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [radarPostText, setRadarPostText] = useState('');
+  const [radarPosterRole, setRadarPosterRole] = useState('Agency Founder');
+  const [radarAnalyzing, setRadarAnalyzing] = useState(false);
+  const [radarResult, setRadarResult] = useState(null);
+  const [copiedCommentIdx, setCopiedCommentIdx] = useState(null);
+
   const [newItem, setNewItem] = useState({
     title: '',
     source_url: '',
@@ -51,6 +57,29 @@ export default function Research() {
     }
   };
 
+  const handleAnalyzeDiscussion = async () => {
+    if (!radarPostText.trim()) return;
+    setRadarAnalyzing(true);
+    try {
+      const res = await api.analyzeDiscussion({
+        post_content: radarPostText,
+        poster_role: radarPosterRole,
+        target_product: "dental_sales_intel"
+      });
+      setRadarResult(res);
+    } catch (err) {
+      alert("Error analyzing post: " + (err.message || err));
+    } finally {
+      setRadarAnalyzing(false);
+    }
+  };
+
+  const handleCopyComment = async (text, idx) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedCommentIdx(idx);
+    setTimeout(() => setCopiedCommentIdx(null), 2000);
+  };
+
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* Header */}
@@ -58,10 +87,10 @@ export default function Research() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
             <BookOpen className="w-8 h-8 text-indigo-400" />
-            B2B Content Research Vault
+            B2B Content Research & Feed Radar
           </h1>
           <p className="text-slate-400 text-sm mt-1 max-w-2xl">
-            Store industry reports, competitor analyses, and public discussion teardowns. Sourced facts are strictly separated from strategic analysis.
+            Store industry reports, competitor analyses, and turn trending competitor posts into authoritative inbound comments.
           </p>
         </div>
 
@@ -72,6 +101,94 @@ export default function Research() {
           <Plus className="w-4 h-4" />
           Add Research Note
         </button>
+      </div>
+
+      {/* Feed & Discussion Radar (Inspired by LinkedIntel) */}
+      <div className="bg-slate-900/80 border border-indigo-900/40 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
+            <Search className="w-4 h-4 text-indigo-400" />
+            Discussion Radar: Break Down Trending Posts & Draft High-Authority Comments
+          </div>
+          <span className="text-[11px] text-slate-400 font-mono">LinkedIntel Engine</span>
+        </div>
+
+        <p className="text-xs text-slate-300">
+          Paste a viral or competitor post from LinkedIn. The radar identifies the underlying commercial vulnerability and drafts 3 high-credibility comments (Builder Reality, Technical Clarification, Tactical Question) that drive profile visits.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="md:col-span-3">
+            <textarea
+              rows={3}
+              placeholder="Paste LinkedIn post text to analyze..."
+              value={radarPostText}
+              onChange={e => setRadarPostText(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+          <div className="space-y-2 flex flex-col justify-between">
+            <div>
+              <label className="text-[11px] font-semibold text-slate-400 uppercase">Poster Profile / Title</label>
+              <input
+                type="text"
+                value={radarPosterRole}
+                onChange={e => setRadarPosterRole(e.target.value)}
+                placeholder="e.g. Agency CEO"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
+              />
+            </div>
+            <button
+              onClick={handleAnalyzeDiscussion}
+              disabled={radarAnalyzing || !radarPostText.trim()}
+              className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition"
+            >
+              {radarAnalyzing ? "Analyzing Thesis..." : "Analyze & Draft Comments"}
+            </button>
+          </div>
+        </div>
+
+        {radarResult && (
+          <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 text-xs space-y-3 animate-fadeIn">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-3 border-b border-slate-800">
+              <div>
+                <span className="text-slate-400 font-semibold block text-[11px]">Core Thesis:</span>
+                <span className="text-slate-200">{radarResult.core_thesis}</span>
+              </div>
+              <div>
+                <span className="text-rose-400 font-semibold block text-[11px]">Commercial Vulnerability:</span>
+                <span className="text-slate-200">{radarResult.target_vulnerability}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              <span className="text-indigo-400 font-bold uppercase tracking-wider block text-[11px]">
+                High-Authority Response Comments (Click to Copy):
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {radarResult.comments?.map((c, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => handleCopyComment(c.text, idx)}
+                    className="p-3 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl cursor-pointer transition flex flex-col justify-between space-y-2 group"
+                  >
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">
+                        {c.style}
+                      </span>
+                      <p className="text-slate-300 text-xs mt-2 group-hover:text-white leading-relaxed">
+                        "{c.text}"
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-slate-500 group-hover:text-indigo-400 font-mono text-right">
+                      {copiedCommentIdx === idx ? "Copied!" : "Click to copy"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Grid of Research Notes */}
