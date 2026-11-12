@@ -102,6 +102,21 @@ def test_post_generation_and_scoring_workflow():
     assert fb_res.status_code == 200
     assert fb_res.json()["success"] is True
 
+def test_multi_agent_generation_pipeline():
+    res = client.post("/api/posts/generate", json={
+        "idea_prompt": "YouTube sales intelligence pipeline for video editors.",
+        "product_key": "podleads_ai",
+        "target_audience": "Video Agency Founders",
+        "content_pillar": 2,
+        "use_multi_agent": True
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["draft_id"] > 0
+    assert data["agent_pipeline"] is not None
+    assert "concise" in data["drafts"]
+    assert "problem_solution" in data["drafts"]
+
 def test_calendar_generation_and_csv():
     res = client.post("/api/calendar/generate", json={"days_count": 7})
     assert res.status_code == 200

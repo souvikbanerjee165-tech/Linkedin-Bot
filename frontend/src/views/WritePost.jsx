@@ -38,6 +38,7 @@ export default function WritePost({ initialIdea = '', initialDraftId = null }) {
   const [selectedProduct, setSelectedProduct] = useState("dental_sales_intel");
   const [selectedPillar, setSelectedPillar] = useState(1);
   const [voiceMatch, setVoiceMatch] = useState(0.85);
+  const [useMultiAgent, setUseMultiAgent] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [regeneratingFormat, setRegeneratingFormat] = useState(false);
@@ -115,7 +116,8 @@ export default function WritePost({ initialIdea = '', initialDraftId = null }) {
         target_audience: targetAudience,
         content_pillar: selectedPillar,
         voice_match_level: voiceMatch,
-        commercial_intent: "Attract decision-makers looking to eliminate manual bottlenecks"
+        commercial_intent: "Attract decision-makers looking to eliminate manual bottlenecks",
+        use_multi_agent: useMultiAgent
       });
       setGenerationResult(res);
       const chosenFormat = (res.drafts && res.drafts[activeFormat]?.full_text) ? activeFormat : "problem_solution";
@@ -373,8 +375,21 @@ export default function WritePost({ initialIdea = '', initialDraftId = null }) {
           </div>
         </div>
 
-        {/* Generate Button */}
-        <div className="flex justify-end pt-2">
+        {/* Multi-Agent Toggle & Generate Button */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-2 border-t border-slate-800">
+          <label className="flex items-center gap-2.5 cursor-pointer text-xs text-slate-300">
+            <input
+              type="checkbox"
+              checked={useMultiAgent}
+              onChange={e => setUseMultiAgent(e.target.checked)}
+              className="rounded bg-slate-950 border-slate-800 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+            />
+            <span className="flex items-center gap-1.5 font-medium">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              Use Multi-Agent Writing Pipeline (Researcher &rarr; Hook Specialist &rarr; Executive Editor)
+            </span>
+          </label>
+
           <button
             onClick={handleGenerate}
             disabled={loading}
@@ -383,12 +398,12 @@ export default function WritePost({ initialIdea = '', initialDraftId = null }) {
             {loading ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                Generating 6 Distinct Drafts with DeepSeek...
+                {useMultiAgent ? 'Running 3-Agent Collaborative Pipeline...' : 'Generating 6 Distinct Drafts with DeepSeek...'}
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                Generate 6 Draft Formats
+                {useMultiAgent ? 'Run Multi-Agent Generation' : 'Generate 6 Draft Formats'}
               </>
             )}
           </button>
@@ -449,6 +464,31 @@ export default function WritePost({ initialIdea = '', initialDraftId = null }) {
                 </button>
               </div>
             </div>
+
+            {/* Multi-Agent Collaborative Brief Panel */}
+            {generationResult?.agent_pipeline && (
+              <div className="bg-indigo-950/30 border border-indigo-900/40 rounded-2xl p-4 space-y-2 text-xs">
+                <div className="flex items-center gap-2 text-indigo-400 font-bold uppercase tracking-wider">
+                  <Sparkles className="w-4 h-4 text-indigo-400" />
+                  Multi-Agent Architecture Brief (Researcher &rarr; Hook Specialist &rarr; Editor)
+                </div>
+                {generationResult.agent_pipeline.researcher_angle && (
+                  <p className="text-slate-300">
+                    <strong className="text-white">Technical Signal Extracted:</strong> {generationResult.agent_pipeline.researcher_angle}
+                  </p>
+                )}
+                {generationResult.agent_pipeline.hook_variations?.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-slate-400 font-semibold">Pre-Screened Anti-Slop Hooks:</span>
+                    <ul className="list-disc list-inside text-slate-300 pl-1 space-y-0.5">
+                      {generationResult.agent_pipeline.hook_variations.map((h, i) => (
+                        <li key={i} className="text-indigo-200 italic">"{h}"</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Claims Verification Warning Box */}
             {currentDraft && currentDraft.claims_to_verify && currentDraft.claims_to_verify.length > 0 && (

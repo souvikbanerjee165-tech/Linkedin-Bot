@@ -5,11 +5,12 @@ import logging
 from app import crud
 from app.schemas import (
     PostGenerateRequest, PostGenerateResponse, DraftFormatOutput,
-    PostDraftResponse, PostDraftUpdate, BuyerIntentScoringBreakdown
+    PostDraftResponse, PostDraftUpdate, BuyerIntentScoringBreakdown, AgentPipelineBrief
 )
 from app.services.deepseek_client import deepseek_client
 from app.services.scoring_engine import scoring_engine
 from app.services.voice_engine import voice_engine
+from app.services.multi_agent_writer import multi_agent_pipeline
 
 logger = logging.getLogger("posts_router")
 router = APIRouter(prefix="/api/posts", tags=["Posts"])
@@ -113,12 +114,31 @@ async def generate_post(payload: PostGenerateRequest):
         {"role": "user", "content": user_prompt}
     ]
 
-    completion = await deepseek_client.call_completion(
-        messages=messages,
-        temperature=0.7,
-        response_format={"type": "json_object"},
-        endpoint_name="post_generation"
-    )
+    pipeline_brief = None
+    if payload.use_multi_agent:
+        completion = await multi_agent_pipeline.run_pipeline(
+            idea_prompt=payload.idea_prompt,
+            target_audience=payload.target_audience,
+            product=product,
+            brand=brand,
+            all_knowledge=all_knowledge,
+            content_pillar=pillar_name,
+            voice_profile=voice_profile,
+            commercial_intent=payload.commercial_intent or "",
+            additional_context=payload.additional_context or ""
+        )
+        pipeline_brief = AgentPipelineBrief(
+            researcher_angle=f"Bottleneck: {completion.get('research_summary', {}).get('core_bottleneck', '')} | Signal: {completion.get('research_summary', {}).get('observable_signal', '')}",
+            hook_variations=completion.get("hook_variations", []),
+            critique_notes="Multi-Agent Pipeline verified anti-slop constraints and verified capability boundaries."
+        )
+    else:
+        completion = await deepseek_client.call_completion(
+            messages=messages,
+            temperature=0.7,
+            response_format={"type": "json_object"},
+            endpoint_name="post_generation"
+        )
 
     # Parse response JSON
     content_str = completion["content"].strip()
@@ -254,6 +274,7 @@ async def generate_post(payload: PostGenerateRequest):
         product_key=payload.product_key,
         drafts=draft_outputs,
         claims_flagged=list(set(flagged_claims)),
+        agent_pipeline=pipeline_brief,
         token_usage={
             "prompt_tokens": completion.get("prompt_tokens", 0),
             "completion_tokens": completion.get("completion_tokens", 0),

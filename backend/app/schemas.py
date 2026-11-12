@@ -207,6 +207,12 @@ class PostGenerateRequest(BaseModel):
     voice_match_level: Optional[float] = 0.85
     commercial_intent: Optional[str] = "Demonstrate capability and spark inbound conversation"
     additional_context: Optional[str] = ""
+    use_multi_agent: bool = False
+
+class AgentPipelineBrief(BaseModel):
+    researcher_angle: Optional[str] = None
+    hook_variations: Optional[List[str]] = []
+    critique_notes: Optional[str] = None
 
 class DraftFormatOutput(BaseModel):
     format_type: str  # concise | story | problem_solution | technical_breakdown | demo | commercial
@@ -227,6 +233,7 @@ class PostGenerateResponse(BaseModel):
     product_key: Optional[str]
     drafts: Dict[str, DraftFormatOutput]
     claims_flagged: List[str]
+    agent_pipeline: Optional[AgentPipelineBrief] = None
     token_usage: Dict[str, Any]
     estimated_cost_usd: float
 
