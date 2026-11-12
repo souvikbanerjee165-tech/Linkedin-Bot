@@ -193,6 +193,15 @@ export default function Exports() {
                       <Download className="w-3.5 h-3.5" />
                       PDF
                     </a>
+                    <a
+                      href={api.getCarouselPdfUrl(d.id)}
+                      download
+                      className="px-3 py-1.5 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 text-xs rounded-lg transition flex items-center gap-1.5"
+                      title="Download 1080x1350 Swipeable Document Post PDF"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Carousel PDF
+                    </a>
                   </div>
                 </div>
               );

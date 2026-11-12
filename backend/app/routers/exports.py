@@ -67,6 +67,27 @@ def get_single_pdf(draft_id: int):
         headers={"Content-Disposition": f"attachment; filename=linkedin_post_{draft_id}.pdf"}
     )
 
+@router.get("/carousel/{draft_id}")
+def get_carousel_pdf(draft_id: int):
+    draft = crud.get_post_draft_by_id(draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    brand = crud.get_profile_brand() or {}
+    author_name = brand.get("headline", "Software Builder & Systems Specialist")[:50]
+    brand_tag = "B2B Sales Intelligence"
+
+    pdf_bytes = export_engine.generate_carousel_pdf(
+        draft=draft,
+        author_name=author_name,
+        brand_tag=brand_tag
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=linkedin_carousel_{draft_id}.pdf"}
+    )
+
 @router.post("/pdf-pack")
 def get_pdf_pack(draft_ids: List[int] = Body(...)):
     drafts = []

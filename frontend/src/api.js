@@ -102,6 +102,7 @@ export const api = {
   getClipboard: (id) => fetch(`${API_BASE}/exports/clipboard/${id}`).then(r => r.json()),
   getMarkdownPackUrl: () => `${API_BASE}/exports/markdown-pack`,
   getSinglePdfUrl: (id) => `${API_BASE}/exports/pdf/${id}`,
+  getCarouselPdfUrl: (id) => `${API_BASE}/exports/carousel/${id}`,
   getPdfPackUrl: () => `${API_BASE}/exports/pdf-pack`,
   getCalendarCsvUrl: () => `${API_BASE}/exports/calendar-csv`,
 

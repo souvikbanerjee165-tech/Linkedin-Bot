@@ -543,6 +543,17 @@ export default function WritePost({ initialIdea = '', initialDraftId = null }) {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {generationResult && (
+                      <a
+                        href={api.getCarouselPdfUrl(generationResult.draft_id)}
+                        download
+                        className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 text-xs font-semibold rounded-xl transition"
+                        title="Download 1080x1350 Swipeable Document Post PDF"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Export PDF Carousel
+                      </a>
+                    )}
                     <button
                       onClick={handleCopyClipboard}
                       className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/20 transition"

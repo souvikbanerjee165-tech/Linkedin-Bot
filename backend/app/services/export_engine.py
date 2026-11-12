@@ -20,6 +20,61 @@ class LinkedInPDFDoc(FPDF):
         self.set_text_color(148, 163, 184) # slate-400
         self.cell(0, 10, f"Page {self.page_no()} | Confidential B2B Positioning & Content Architecture", border=0, align="C")
 
+class LinkedInCarouselDoc(FPDF):
+    """
+    LinkedIn Document Post (Carousel) Generator.
+    Standard high-converting carousel format: 1080 x 1350 portrait (4:5 ratio)
+    Rendered as 108 x 135 mm pages with dark-mode executive styling.
+    """
+    def __init__(self, author_name: str = "Software Builder & Systems Specialist", brand_tag: str = "B2B Sales Intelligence"):
+        super().__init__(orientation="P", unit="mm", format=(108, 135))
+        self.author_name = author_name
+        self.brand_tag = brand_tag
+        self.set_auto_page_break(auto=False)
+
+    def draw_slide_decorations(self, current_slide: int, total_slides: int):
+        # Background: dark slate-950 (#090d16)
+        self.set_fill_color(9, 13, 22)
+        self.rect(0, 0, 108, 135, style="F")
+
+        # Top Accent Header Bar (Indigo gradient proxy: #4f46e5)
+        self.set_fill_color(79, 70, 229)
+        self.rect(0, 0, 108, 2.5, style="F")
+
+        # Header Author / Brand Text
+        self.set_xy(8, 7)
+        self.set_font("Helvetica", "B", 7)
+        self.set_text_color(226, 232, 240) # slate-200
+        safe_author = self.author_name.encode('latin-1', 'replace').decode('latin-1')
+        self.cell(50, 4, safe_author, border=0)
+
+        self.set_xy(60, 7)
+        self.set_font("Helvetica", "", 6.5)
+        self.set_text_color(129, 140, 248) # indigo-400
+        safe_tag = self.brand_tag.encode('latin-1', 'replace').decode('latin-1')
+        self.cell(40, 4, safe_tag, border=0, align="R")
+
+        # Subtle Header divider line
+        self.set_draw_color(30, 41, 59) # slate-800
+        self.line(8, 13, 100, 13)
+
+        # Footer: Slide Tracker & Swipe indicator
+        self.set_draw_color(30, 41, 59)
+        self.line(8, 124, 100, 124)
+
+        self.set_xy(8, 126)
+        self.set_font("Helvetica", "B", 6.5)
+        self.set_text_color(148, 163, 184) # slate-400
+        self.cell(40, 4, f"SLIDE {current_slide} OF {total_slides}", border=0)
+
+        self.set_xy(58, 126)
+        self.set_font("Helvetica", "I", 6.5)
+        self.set_text_color(99, 102, 241) # indigo-500
+        if current_slide < total_slides:
+            self.cell(42, 4, "SWIPE ->", border=0, align="R")
+        else:
+            self.cell(42, 4, "SAVE & REPOST", border=0, align="R")
+
 class ExportEngine:
     def format_for_linkedin_clipboard(self, raw_text: str) -> str:
         """
@@ -173,5 +228,184 @@ class ExportEngine:
             pdf.ln(4)
 
         return bytes(pdf.output())
+
+    def generate_carousel_pdf(
+        self,
+        draft: Dict[str, Any],
+        author_name: str = "Software Builder & Systems Specialist",
+        brand_tag: str = "B2B Sales Intelligence"
+    ) -> bytes:
+        """
+        Transforms a LinkedIn post draft (e.g. Technical Breakdown, Problem-Solution, Demo)
+        into a 5-6 slide visual, swipeable PDF Carousel optimized for LinkedIn document posts.
+        """
+        fmt = draft.get("active_draft_format", "problem_solution")
+        raw_text = draft.get("final_edited_content") or draft.get(f"{fmt}_draft") or draft.get("problem_solution_draft") or ""
+        idea = draft.get("idea_prompt", "B2B Systems Blueprint")
+        audience = draft.get("target_audience", "B2B Leaders & Agency Owners")
+        product_key = draft.get("product_key", "custom_systems")
+
+        # Deconstruct text into paragraphs
+        paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
+        hook = paragraphs[0] if paragraphs else idea[:120]
+        body_paras = paragraphs[1:-1] if len(paragraphs) > 2 else paragraphs[1:]
+        cta = paragraphs[-1] if len(paragraphs) > 2 else "Connect or send a DM to discuss your pipeline."
+
+        # Build 5 slide payloads
+        slides_data = []
+
+        # Slide 1: Cover Hook Slide
+        slides_data.append({
+            "type": "cover",
+            "kicker": f"B2B WORKFLOW ARCHITECTURE  |  {fmt.replace('_', ' ').upper()}",
+            "headline": hook,
+            "subhead": f"Target Reader: {audience}"
+        })
+
+        # Slide 2: The Bottleneck / Friction Point
+        p1 = body_paras[0] if len(body_paras) > 0 else "Manual workflow steps create friction before sales teams start."
+        slides_data.append({
+            "type": "content",
+            "badge": "STEP 1: THE BOTTLENECK",
+            "title": "Where Most Workflows Break Down",
+            "body": p1
+        })
+
+        # Slide 3: The System Solution / Architecture
+        p2 = body_paras[1] if len(body_paras) > 1 else (body_paras[0] if body_paras else "Inspect observable digital signals before writing prompts.")
+        slides_data.append({
+            "type": "content",
+            "badge": "STEP 2: THE SYSTEM SOLUTION",
+            "title": "Architecting The Solution",
+            "body": p2
+        })
+
+        # Slide 4: Key Takeaway & Trade-offs
+        p3 = body_paras[2] if len(body_paras) > 2 else "Deterministic rules for data; language models for synthesis. Never confuse the two."
+        slides_data.append({
+            "type": "content",
+            "badge": "STEP 3: EXECUTION PRINCIPLE",
+            "title": "What Good Implementation Looks Like",
+            "body": p3
+        })
+
+        # Slide 5: Call to Action Slide
+        slides_data.append({
+            "type": "cta",
+            "badge": "TAKE ACTION",
+            "title": "Want to Eliminate This Bottleneck?",
+            "body": cta,
+            "footnote": f"Software Solution: {product_key.replace('_', ' ').title()}"
+        })
+
+        total_slides = len(slides_data)
+        doc = LinkedInCarouselDoc(author_name=author_name, brand_tag=brand_tag)
+
+        for idx, slide in enumerate(slides_data, start=1):
+            doc.add_page()
+            doc.draw_slide_decorations(idx, total_slides)
+
+            stype = slide.get("type")
+            if stype == "cover":
+                # Kicker tag
+                doc.set_xy(8, 24)
+                doc.set_font("Helvetica", "B", 6.5)
+                doc.set_text_color(129, 140, 248) # indigo-400
+                doc.cell(92, 5, slide["kicker"], border=0)
+
+                # Huge Hook Headline
+                doc.set_xy(8, 32)
+                doc.set_font("Helvetica", "B", 13.5)
+                doc.set_text_color(255, 255, 255)
+                safe_headline = slide["headline"].encode('latin-1', 'replace').decode('latin-1')
+                doc.multi_cell(92, 6.8, safe_headline)
+
+                # Subhead Box
+                doc.set_y(86)
+                doc.set_fill_color(15, 23, 42) # slate-900
+                doc.rect(8, 86, 92, 26, style="F")
+                doc.set_draw_color(79, 70, 229)
+                doc.line(8, 86, 8, 112) # Indigo left border accent
+
+                doc.set_xy(12, 90)
+                doc.set_font("Helvetica", "B", 7)
+                doc.set_text_color(148, 163, 184)
+                doc.cell(84, 4, "BUYER AUDIENCE TARGET", border=0)
+
+                doc.set_xy(12, 96)
+                doc.set_font("Helvetica", "", 7.5)
+                doc.set_text_color(226, 232, 240)
+                safe_subhead = slide["subhead"].encode('latin-1', 'replace').decode('latin-1')
+                doc.multi_cell(84, 4.5, safe_subhead)
+
+            elif stype == "content":
+                # Badge pill
+                doc.set_fill_color(30, 41, 59) # slate-800
+                doc.rect(8, 22, 56, 6, style="F")
+                doc.set_xy(10, 22)
+                doc.set_font("Helvetica", "B", 6)
+                doc.set_text_color(165, 180, 252) # indigo-300
+                doc.cell(52, 6, slide["badge"], border=0)
+
+                # Slide Title
+                doc.set_xy(8, 33)
+                doc.set_font("Helvetica", "B", 11)
+                doc.set_text_color(255, 255, 255)
+                safe_title = slide["title"].encode('latin-1', 'replace').decode('latin-1')
+                doc.multi_cell(92, 5.5, safe_title)
+
+                # Main Body Card Box
+                doc.set_fill_color(15, 23, 42) # slate-900
+                doc.rect(8, 48, 92, 68, style="F")
+                doc.set_draw_color(51, 65, 85)
+                doc.rect(8, 48, 92, 68, style="D")
+
+                doc.set_xy(12, 53)
+                doc.set_font("Helvetica", "", 8)
+                doc.set_text_color(203, 213, 225) # slate-300
+                safe_body = slide["body"].encode('latin-1', 'replace').decode('latin-1')
+                doc.multi_cell(84, 5.2, safe_body)
+
+            elif stype == "cta":
+                # Badge pill
+                doc.set_fill_color(30, 41, 59)
+                doc.rect(8, 22, 38, 6, style="F")
+                doc.set_xy(10, 22)
+                doc.set_font("Helvetica", "B", 6)
+                doc.set_text_color(52, 211, 153) # emerald-400
+                doc.cell(34, 6, slide["badge"], border=0)
+
+                # Title
+                doc.set_xy(8, 33)
+                doc.set_font("Helvetica", "B", 11.5)
+                doc.set_text_color(255, 255, 255)
+                safe_title = slide["title"].encode('latin-1', 'replace').decode('latin-1')
+                doc.multi_cell(92, 5.5, safe_title)
+
+                # Card Box
+                doc.set_fill_color(15, 23, 42)
+                doc.rect(8, 48, 92, 50, style="F")
+                doc.set_draw_color(79, 70, 229)
+                doc.rect(8, 48, 92, 50, style="D")
+
+                doc.set_xy(12, 54)
+                doc.set_font("Helvetica", "B", 8.5)
+                doc.set_text_color(226, 232, 240)
+                safe_body = slide["body"].encode('latin-1', 'replace').decode('latin-1')
+                doc.multi_cell(84, 5.2, safe_body)
+
+                # Direct message callout box
+                doc.set_fill_color(79, 70, 229) # indigo-600
+                doc.rect(8, 104, 92, 14, style="F")
+                doc.set_xy(10, 106)
+                doc.set_font("Helvetica", "B", 8)
+                doc.set_text_color(255, 255, 255)
+                doc.cell(88, 4, "Send a Direct Message with 'AUDIT'", border=0, align="C")
+                doc.set_xy(10, 111)
+                doc.set_font("Helvetica", "", 6.5)
+                doc.set_text_color(224, 231, 255)
+                doc.cell(88, 4, "For a 10-minute teardown of your observable workflow bottlenecks", border=0, align="C")
+
+        return bytes(doc.output())
 
 export_engine = ExportEngine()

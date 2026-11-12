@@ -52,3 +52,19 @@ def test_pdf_generation_valid_output():
     assert isinstance(pdf_bytes, bytes)
     assert len(pdf_bytes) > 500
     assert pdf_bytes.startswith(b"%PDF")
+
+def test_carousel_pdf_generation_valid_output():
+    mock_draft = {
+        "id": 1,
+        "idea_prompt": "Testing dental clinic inspection signals",
+        "active_draft_format": "technical_breakdown",
+        "target_audience": "Dental Practice Owners",
+        "product_key": "dental_sales_intel",
+        "final_edited_content": "Before buying an outreach tool, inspect public website booking triggers.\n\nHere is how the pipeline works under the hood.\n\nStep 1: Signal Ingestion\nStep 2: Heuristic Scoring\n\nDM me AUDIT to review your practice.",
+        "claims_flagged": [],
+        "visual_suggestion": "Pipeline flowchart"
+    }
+    carousel_bytes = export_engine.generate_carousel_pdf(mock_draft)
+    assert isinstance(carousel_bytes, bytes)
+    assert len(carousel_bytes) > 500
+    assert carousel_bytes.startswith(b"%PDF")
